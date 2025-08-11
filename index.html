@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mind Garden — v10.23 (single-file)</title>
+<style>
+  :root{
+    --card:#fff; --ink:#0f172a; --muted:#64748b;
+    --sky1:#cfeafe; --sky2:#a5d8ff; --ring:#fcd34d; --blue50:#eff6ff;
+    --win-h: 460px;
+    --ground-h: 140px;
+    --sill-h: 40px;
+    --grass:#16624f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif; background:linear-gradient(#ecfdf5,#d1fae5); color:var(--ink)}
+  .container{max-width:1100px; margin:0 auto; padding:24px}
+  h1{margin:0 0 16px; font-weight:650; letter-spacing:-.02em}
+  .grid{display:grid; gap:16px}
+  .card{background:var(--card); border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 2px 6px rgba(15,23,42,.06)}
+  .content{padding:16px}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .btn{appearance:none; border:1px solid #d1d5db; background:#fff; color:#111827; border-radius:12px; padding:10px 14px; cursor:pointer; font-weight:600}
+  .btn:hover{background:#f9fafb}
+  .btn.primary{background:#10b981; color:#fff; border-color:#059669}
+  .btn.secondary{background:#f3f4f6}
+  .btn[disabled]{opacity:.5; cursor:not-allowed}
+  .small{font-size:12px; color:var(--muted)}
+  .tag{font-size:12px; background:#eef2ff; color:#4338ca; padding:3px 8px; border-radius:999px; display:inline-block}
+  .input, select{width:100%; padding:10px 12px; border-radius:12px; border:1px solid #d1d5db; background:#fff}
+  .status-grid{display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:16px}
+  .status-item .label{font-size:12px; color:var(--muted)}
+  .status-item .value{font-weight:600}
+  .two-col{display:grid; grid-template-columns:1fr 320px; gap:16px}
+  @media(max-width:860px){ .two-col{grid-template-columns:1fr} .sticky{position:static} }
+  .sticky{position:sticky; top:12px}
+  .plants-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px}
+  @media(max-width:700px){ .plants-grid{grid-template-columns:1fr} }
+  .progress{position:relative; height:8px; background:#eef2ff; border-radius:999px; overflow:hidden}
+  .progress .bar{height:100%; background:#34d399}
+  /* window environment */
+  .window{position:relative; border-radius:16px; overflow:hidden; box-shadow: inset 0 2px 6px rgba(0,0,0,.06); height:var(--win-h)}
+  .sky{position:absolute; inset:0; background:linear-gradient(var(--sky1), var(--sky2)); z-index:0; transition: background .5s linear}
+  .stars{position:absolute; inset:0; z-index:1; pointer-events:none; opacity:0; transition:opacity .5s linear}
+  .ground{position:absolute; left:0; right:0; bottom:0; height:var(--ground-h); background:var(--grass); z-index:3}
+  .mullion-h{position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.7); z-index:5}
+  .mullion-v{position:absolute; top:0; bottom:0; left:50%; width:1px; background:rgba(255,255,255,.7); z-index:5}
+  .frame{position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 0 8px var(--ring); border-radius:16px; z-index:6}
+  .sill{position:absolute; left:0; right:0; height:var(--sill-h); bottom:0; background:#fbbf24; box-shadow:0 2px 6px rgba(0,0,0,.1); z-index:6}
+  .window-inner{position:relative; z-index:4; height:100%}
+  .sun,.moon{position:absolute; width:64px; height:64px; border-radius:999px; transform:translate(-50%, -50%); z-index:1}
+  .sun{background:#fde047; opacity:.9}
+  .moon{background:#e2e8f0; opacity:0; box-shadow:0 0 8px rgba(255,255,255,.35) inset}
+  .cloud-band{position:absolute; left:0; right:0; display:flex; justify-content:space-around; z-index:2}
+  .cloud{position:relative; opacity:.9; transition:opacity .5s linear}
+  .cloud .b{position:absolute; background:#fff; border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,.06)}
+  @keyframes cloudRL1{0%{transform:translateX(12%)}100%{transform:translateX(-12%)}}
+  @keyframes cloudRL2{0%{transform:translateX(8%)}100%{transform:translateX(-16%)}}
+  /* gallery absolute layer (above sill) */
+  .gallery-layer{position:absolute; left:3%; right:3%; bottom: 0; top: 12%; z-index:7; pointer-events:none}
+  .drag-plant{position:absolute; /* no translateX now */ display:flex; align-items:flex-end; justify-content:center; height: 40%; pointer-events:none; bottom: calc(var(--sill-h)/2);}
+  .drag-plant.is-arrange{pointer-events:auto; cursor:grab}
+  .drag-plant.is-arrange.dragging{cursor:grabbing}
+  .mini-card .scaled{transform:scale(1.2); transform-origin:bottom center}
+  /* sign (tip) */
+  .sign{position:relative; background:#fff8e7; border:3px solid #d6aa6a; border-radius:12px; padding:12px 14px; font-family: "Georgia","Garamond",serif; color:#5b4636; box-shadow:0 3px 0 #c79a59, 0 8px 16px rgba(0,0,0,.06)}
+  .sign:before,.sign:after{content:""; position:absolute; top:-8px; width:8px; height:8px; background:#c79a6a; border-radius:50%}
+  .sign:before{left:12px} .sign:after{right:12px}
+  .sign .title{font-weight:700; font-size:14px; margin-bottom:6px}
+  .sign p{margin:0; font-size:14px; line-height:1.35}
+  .small-note{font-size:12px; color:var(--muted)}
+  .hidden{display:none !important}
+  /* curtains */
+  .curtain-wrap{position:absolute; inset:0; pointer-events:none; z-index:6}
+  .curtain-svg{position:absolute; top:0; bottom:0; width:56px; filter:drop-shadow(0 2px 4px rgba(0,0,0,.08))}
+  .curtain-svg.left{left:0}
+  .curtain-svg.right{right:0; transform:scaleX(-1)}
+  .valance-svg{position:absolute; left:0; right:0; top:0; height:44px; width:100%; filter:drop-shadow(0 2px 4px rgba(0,0,0,.08))}
+</style>
+</head>
+<body>
+<div class="container" id="app"></div>
+
+<script>
+(function(){
+  const SUNRISE_H = 7, SUNSET_H = 19, MAX_PLANTS = 4;
+  const fmt2 = (n)=> String(n).padStart(2,'0');
+  const toAmPm = (h,m)=>{ const period = h>=12 ? "p.m." : "a.m."; const hh = h%12===0? 12 : h%12; return hh+":"+fmt2(m)+" "+period; };
+  const todayKey = ()=> new Date().toISOString().slice(0,10);
+  const clamp = (v,lo,hi)=> Math.min(hi, Math.max(lo,v));
+
+  const DEFAULT_CONFIG = {
+    dailyUnlockHour: 7, dailyUnlockMinute: 0,
+    dailyActions: 30,
+    actionsToMature: 30,
+    breathingEnabled: true,
+    turnsBetweenBreaths: 5,
+    breathPhases: [4,7,8],
+    unlockTimeText: "7:00 a.m.",
+    postActionPauseEnabled: true,
+    postActionPauseSec: 3
+  };
+  const LS_KEY = "mind-garden-v10-12";
+
+  const STYLE_COLORS = { daisy:["white","yellow"], sunflower:["yellow"], tulip:["red","pink","yellow","white"], lotus:["pink","white"], bell:["blue","purple"] };
+  const COLOR_HEX = { white:"#ffffff", yellow:"#facc15", pink:"#f472b6", blue:"#60a5fa", purple:"#a78bfa", red:"#ef4444" };
+  const POT_STYLES = ["terracotta","striped","ceramic","classic"];
+  const TYPE_HEIGHT = { daisy:0.42, sunflower:0.50, tulip:0.36, lotus:0.46, bell:0.40 };
+  const HEIGHT_STEPS = [0, 0.12, 0.24];
+
+  const DOPAMINE_FACTS = [
+    "Unpredictable rewards keep prediction errors high; predictability reduces compulsive checking.",
+    "Delaying actions slightly can weaken cue→reward linkage and curb habits.",
+    "Consistent sleep, sunlight, and exercise stabilize baseline dopamine tone.",
+    "Slow, deep breathing shifts the nervous system toward parasympathetic calm.",
+    "Small, steady progress often outperforms rare, large rewards for long-term habits.",
+    "Batching notifications lowers the number of reinforcement cycles per day.",
+    "Ending sessions cleanly helps prevent 'just one more' loops.",
+    "Warm starts beat heroic sprints: two easy actions now beat a perfect plan later.",
+    "Label the habit loop out loud—naming it reduces its pull.",
+    "Make success visible but calm: steady growth, not fireworks.",
+    "Protect mornings—early checks can hijack the day’s reward budget.",
+    "Track effort, not perfection—missed days are potholes, not cliffs.",
+    "Nourish basics first; brains are living gardens.",
+    "Your brain notices change, not sameness—keep tools boring, goals clear.",
+    "Cravings fade like waves; ride one breath at a time.",
+    "Reduce cues, reduce cravings: hide the slot machine, find the book.",
+    "Sleep is the master reset for learning and mood.",
+    "Move your body daily—motion fertilizes attention and memory.",
+    "Swap 'doom scroll' with 'single scroll': open one page, one purpose.",
+    "Short, timed bouts of focus train dopamine to expect closure.",
+    "Write wins down—visible progress nudges the next step.",
+    "If it’s urgent, it can wait one breath. If it can’t, call.",
+    "Savoring small wins builds resilience more reliably than big highs.",
+    "Practice quitting on time: ends teach your brain that stopping is safe.",
+    "Make friction your friend—extra steps reduce compulsive checking.",
+    "Pair a cue with a calm act: one stretch, one breath, then choose.",
+    "Schedule fun on purpose so it doesn’t leak into everything else.",
+    "Learning sticks when effort is spaced and sleep follows.",
+    "Environment beats willpower: rearrange the room, change the loop.",
+    "When stuck, lower the bar—do the smallest true next step.",
+    "Treat attention like sunlight: point it where you want things to grow.",
+  ];
+
+  function DEFAULT_PLANT(){
+    const style = "daisy"; const colors = STYLE_COLORS[style];
+    return { growth:0, flowerStyle:style, flowerColor:colors[0], potStyle: POT_STYLES[Math.floor(Math.random()*POT_STYLES.length)],
+      styleLocked:false, readyToPlace:false, lowerLeafLeft: Math.random()<0.5, bellDir: (Math.random()<0.5?-1:1),
+      leaf1Y:88+Math.round(Math.random()*6), leaf2Y:72+Math.round(Math.random()*6) };
+  }
+
+  let state = (function(){
+    try{
+      const s = JSON.parse(localStorage.getItem(LS_KEY)||"null");
+      if (!s) return fresh();
+      const today = todayKey();
+      if (!s.day || s.day.date!==today){
+        s.day = { date: today, actionsRemaining: (s.config?.dailyActions||DEFAULT_CONFIG.dailyActions), plants: s.day?.plants || [DEFAULT_PLANT()], playedToday:false };
+      }
+      s.day.plants = (s.day.plants||[]).map(p=> ({ lowerLeafLeft: (p.lowerLeafLeft!=null?p.lowerLeafLeft:(Math.random()<0.5)), bellDir:(p.bellDir!=null?p.bellDir:(Math.random()<0.5?-1:1)), ...p }));
+      if (!s.config) s.config = {...DEFAULT_CONFIG};
+      if (!('actionsToMature' in s.config)) s.config.actionsToMature = 30;
+      if (!('postActionPauseEnabled' in s.config)) s.config.postActionPauseEnabled = true;
+      if (!('postActionPauseSec' in s.config)) s.config.postActionPauseSec = 3;
+      if (!s.gallery) s.gallery = [];
+      s.gallery = s.gallery.map((gp,i,arr)=> {
+        let base = (TYPE_HEIGHT[gp.flowerStyle||'daisy']||0.42);
+        let tier = (gp.heightTier!=null? gp.heightTier : Math.floor(Math.random()*HEIGHT_STEPS.length));
+        let h = base + HEIGHT_STEPS[tier];
+        if (gp.galleryH!=null) h = gp.galleryH; // preserve existing
+        return { xPct: (gp.xPct!=null? gp.xPct : ( (i+1)/(arr.length+1) * 94 + 3 ) ), galleryH: Math.max(0.34, Math.min(0.62, h)), heightTier: tier, ...gp };
+      });
+      if (!s.plantSlots) s.plantSlots = Math.min(4, s.day?.plants?.length || 1);
+      if (s.plantSlots<1) s.plantSlots = 1;
+      s.sessionActive=false; s.cooldownUntil=0; s.breathPrepUntil=0; s.postPauseUntil=0; s.actionCount=0; s.lastFact=''; s.arrangeMode=false;
+      s.unlimitedActions=false; s.devMode=false; s.devSliderHour=13.0; s.pendingPlantUnlock=false;
+      s.__ppActive=false;
+      return s;
+    }catch{ return fresh(); }
+  })();
+
+  function fresh(){
+    return { config:{...DEFAULT_CONFIG}, day:{ date: todayKey(), actionsRemaining: DEFAULT_CONFIG.dailyActions, plants: [DEFAULT_PLANT()], playedToday:false },
+      plantSlots:1, streak:0, lastPlayDate:null, gallery:[], sessionActive:false, cooldownUntil:0, breathPrepUntil:0, postPauseUntil:0, actionCount:0, lastFact:'',
+      arrangeMode:false, unlimitedActions:false, devMode:false, devSliderHour:13.0, pendingPlantUnlock:false, __ppActive:false };
+  }
+  function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+
+  function markPlayed(){
+    if (state.day.playedToday) return;
+    const last = state.lastPlayDate, today = state.day.date;
+    const y = new Date(); y.setDate(y.getDate()-1); const yesterdayKey = y.toISOString().slice(0,10);
+    const newStreak = last===yesterdayKey ? (state.streak+1) : (last===today ? state.streak : (last ? 1 : 1));
+    const prevBuckets = Math.floor((state.streak||0)/7); const newBuckets  = Math.floor(newStreak/7);
+    state.day.playedToday = true; state.streak = newStreak; state.lastPlayDate = today;
+    if (newBuckets>prevBuckets && state.plantSlots<4){ state.pendingPlantUnlock = true; }
+  }
+  function addPlantSlot(){ if (state.plantSlots>=4) return; state.plantSlots += 1; state.day.plants.push(DEFAULT_PLANT()); state.pendingPlantUnlock=false; }
+
+  function parseUnlockTime(){
+    const s = state.config.unlockTimeText || "7:00 a.m.";
+    const m1 = s.match(/^(\\d{1,2}):(\\d{2})\\s*([ap])?\\.?m?\\.?$/i);
+    if (m1){ let h=+m1[1], m=+m1[2], ap=m1[3]; if (ap){ ap=ap.toLowerCase(); if (ap==='p'&&h!==12) h+=12; if (ap==='a'&&h===12) h=0; } return {h, m}; }
+    const m2 = s.match(/^(\\d{1,2}):(\\d{2})$/); if (m2){ return {h:+m2[1], m:+m2[2]}; } return {h:7, m:0};
+  }
+  function isLocked(){ const {h,m}=parseUnlockTime(); const d=new Date(); d.setHours(h,m,0,0); return new Date() < d; }
+  function nextUnlock(){ const {h,m}=parseUnlockTime(); const now=new Date(); const d=new Date(); d.setHours(h,m,0,0); if (now>d) d.setDate(d.getDate()+1); return d; }
+  function startSession(){ if (isLocked()) return; if (state.day.actionsRemaining<=0 && !state.unlimitedActions) return; state.sessionActive=true; save(); render(); }
+  function endSession(){ state.sessionActive=false; markPlayed(); save(); render(); }
+
+  function maybeBreathe(){
+    const should = state.config.breathingEnabled && ((state.actionCount) % state.config.turnsBetweenBreaths === 0);
+    if (!should) return;
+    const prep = 3000; const phasesMs = state.config.breathPhases.reduce((a,b)=>a+b,0)*1000; const now = Date.now();
+    state.breathPrepUntil = now + prep; state.cooldownUntil = 0;
+    setTimeout(()=>{ state.breathPrepUntil=0; state.cooldownUntil=Date.now()+phasesMs; save(); renderRightRailOnly(); }, prep);
+    save(); renderRightRailOnly();
+  }
+  function afterAnyAction(){
+    markPlayed();
+    state.actionCount += 1;
+    state.lastFact = DOPAMINE_FACTS[Math.floor(Math.random()*DOPAMINE_FACTS.length)];
+    const willBreath = state.config.breathingEnabled && ((state.actionCount) % state.config.turnsBetweenBreaths === 0);
+    if (!willBreath && state.config.postActionPauseEnabled){
+      const pauseMs = Math.max(0, (state.config.postActionPauseSec||0) * 1000);
+      state.postPauseUntil = Date.now() + pauseMs;
+      state.__ppActive = true;
+    }
+    maybeBreathe();
+    save(); render();
+  }
+  function gainPerAction(){ return 100 / Math.max(1, state.config.actionsToMature); }
+  function decActions(){ if (!state.unlimitedActions) state.day.actionsRemaining -= 1; }
+  function tend(idx){
+    const now = Date.now();
+    if (!state.sessionActive) return;
+    if ((state.day.actionsRemaining<=0 && !state.unlimitedActions)) { endSession(); return; }
+    if (now<state.cooldownUntil || now<state.postPauseUntil) return;
+    decActions();
+    const gain = gainPerAction();
+    state.day.plants = state.day.plants.map((p,i)=>{
+      if (i!==idx) return p;
+      const newGrowth = Math.min(100, p.growth + gain); const justCompleted = (p.growth<100 && newGrowth>=100);
+      return {...p, growth:newGrowth, readyToPlace: justCompleted ? true : p.readyToPlace };
+    });
+    afterAnyAction();
+  }
+  function placePlantFromIndex(i, index){
+    const p = state.day.plants[i]; if (!p || !p.readyToPlace) return; insertIntoGallery(p, index); state.day.plants[i] = DEFAULT_PLANT(); save(); render();
+  }
+  function insertIntoGallery(plant, index){
+    const g = state.gallery||[];
+    const base = TYPE_HEIGHT[plant.flowerStyle] || 0.42;
+    const tier = Math.floor(Math.random()*HEIGHT_STEPS.length);
+    const h = Math.max(0.34, Math.min(0.62, base + HEIGHT_STEPS[tier]));
+    const xPct = (g.length===0)? 50 : Math.max(3, Math.min(97, ( (index+1)/(g.length+1) * 94 + 3 )));
+    g.splice(index, 0, {...plant, galleryH: h, heightTier: tier, xPct}); state.gallery = g;
+  }
+
+  function progressBar(v){ return `<div class="progress"><span class="bar" style="width:${Math.max(0, Math.min(100, v))}%"></span></div>`; }
+
+  /* --- SVG helpers & plant renderers --- */
+  function teardropPath(cx, cy, w, h){
+    const x0 = cx, y0 = cy;
+    const lx = cx - w/2, rx = cx + w/2, ty = cy - h;
+    return `M ${x0} ${y0} C ${lx} ${cy - h*0.55}, ${lx} ${ty}, ${cx} ${ty} C ${rx} ${ty}, ${rx} ${cy - h*0.55}, ${x0} ${y0} Z`;
+  }
+  function rotatePath(path, cx, cy, deg){ return `<g transform="rotate(${deg} ${cx} ${cy})">${path}</g>`; }
+
+  function potSVG(style){
+    if (style==="striped"){ return `<g><ellipse cx="60" cy="126" rx="22" ry="4" fill="rgba(0,0,0,0.08)"/><path d="M36 100 L84 100 L76 126 Q60 132 44 126 Z" fill="#f4a261" stroke="#e38b3a"/><rect x="32" y="96" width="56" height="10" rx="6" fill="#f6ad55" stroke="#e38b3a"/><rect x="36" y="108" width="48" height="4" rx="2" fill="#e9c46a"/><rect x="36" y="116" width="48" height="4" rx="2" fill="#e9c46a"/></g>`; }
+    if (style==="ceramic"){ return `<g><ellipse cx="60" cy="126" rx="22" ry="4" fill="rgba(0,0,0,0.08)"/><path d="M36 100 L84 100 L76 126 Q60 132 44 126 Z" fill="#fef3c7" stroke="#fcd34d"/><rect x="32" y="96" width="56" height="10" rx="6" fill="#fde68a" stroke="#fcd34d"/><circle cx="46" cy="112" r="3" fill="#60a5fa"/><circle cx="60" cy="118" r="3" fill="#34d399"/><circle cx="74" cy="111" r="3" fill="#f472b6"/></g>`; }
+    if (style==="classic"){ return `<g><ellipse cx="60" cy="126" rx="22" ry="4" fill="rgba(0,0,0,0.08)"/><path d="M36 100 L84 100 L76 126 Q60 132 44 126 Z" fill="#e07a5f" stroke="#c4664e"/><rect x="32" y="96" width="56" height="10" rx="6" fill="#ed8f6a" stroke="#c4664e"/><path d="M38 110 Q60 104 82 110" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"/></g>`; }
+    return `<g><ellipse cx="60" cy="126" rx="22" ry="4" fill="rgba(0,0,0,0.08)"/><path d="M36 100 L84 100 L76 126 Q60 132 44 126 Z" fill="#f4a261" stroke="#e38b3a"/><rect x="32" y="96" width="56" height="10" rx="6" fill="#f6ad55" stroke="#e38b3a"/><rect x="40" y="111" width="40" height="4" rx="2" fill="#e9c46a"/></g>`;
+  }
+
+  function plantSVG(p){
+    const growth = p.growth||0; const stemH = 10 + growth*0.8; const baseX = 60, topX=60, topY = 100 - stemH;
+    let stemPath = `<path d="M ${baseX} 100 Q ${baseX} ${100 - stemH*0.4}, ${topX} ${topY}" stroke="#047857" stroke-width="2" fill="none" />`;
+
+    function petals(style){
+      const col = COLOR_HEX[p.flowerColor] || "#f472b6";
+      if (style==="daisy"){
+        let petals=''; const petalColor = (p.flowerColor==="white") ? "#ffffff" : COLOR_HEX["yellow"];
+        for(let i=0;i<12;i++){ const ang=i*Math.PI/6, px=topX+Math.cos(ang)*10, py=topY+Math.sin(ang)*10;
+          petals += `<ellipse cx="${px}" cy="${py}" rx="5" ry="9" transform="rotate(${ang*180/Math.PI} ${px} ${py})" fill="${petalColor}" stroke="rgba(0,0,0,.06)" stroke-width=".5"/>`; }
+        return `${petals}<circle cx="${topX}" cy="${topY}" r="5.5" fill="#d97706"/>`;
+      }
+      if (style==="tulip"){
+        return `<path d="M ${topX-10} ${topY} C ${topX-18} ${topY+18}, ${topX+18} ${topY+18}, ${topX+10} ${topY} Q ${topX+2} ${topY-22}, ${topX} ${topY-10} Q ${topX-2} ${topY-22}, ${topX-10} ${topY} Z" fill="${col}" stroke="rgba(0,0,0,.06)" stroke-width=".6"/>`;
+      }
+      if (style==="sunflower"){
+        let petals=''; for(let i=0;i<22;i++){ const ang=i*Math.PI/11, px=topX+Math.cos(ang)*12, py=topY+Math.sin(ang)*12;
+          petals += `<ellipse cx="${px}" cy="${py}" rx="4.5" ry="8" transform="rotate(${ang*180/Math.PI} ${px} ${py})" fill="${COLOR_HEX["yellow"]}"/>`; }
+        return `${petals}<circle cx="${topX}" cy="${topY}" r="7.5" fill="#8b5e34"/>`;
+      }
+      if (style==="lotus"){
+        const petCol=(p.flowerColor==="white"?"#ffffff":COLOR_HEX["pink"]);
+        let g='';
+        const back1 = teardropPath(topX-12, topY+10, 26, 30);
+        const back2 = teardropPath(topX+12, topY+10, 26, 30);
+        g += `<path d="${back1}" fill="${petCol}" opacity="0.55" />`;
+        g += `<path d="${back2}" fill="${petCol}" opacity="0.55" />`;
+        const sideL = teardropPath(topX-11, topY+8, 22, 36);
+        const sideR = teardropPath(topX+11, topY+8, 22, 36);
+        g += `<path d="${sideL}" fill="${petCol}" opacity="0.85" />`;
+        g += `<path d="${sideR}" fill="${petCol}" opacity="0.85" />`;
+        const center = teardropPath(topX, topY+6, 20, 42);
+        g += `<path d="${center}" fill="${petCol}" opacity="0.98" />`;
+        return g;
+      }
+      if (style==="bell"){
+        const bellCol=(p.flowerColor==="blue"?COLOR_HEX["blue"]:COLOR_HEX["purple"]);
+        const dir = (p.bellDir||1);
+        const neckX = topX + dir*10, neckY = topY + 2;
+        const peduncle = `<path d="M ${topX} ${topY} Q ${topX + dir*8} ${topY+6}, ${neckX} ${neckY}" stroke="#047857" stroke-width="2" fill="none" />`;
+        const baseX = neckX + dir*2, baseY = neckY + 6;
+        let lobes='';
+        const lobeAngles = [-22,-8,8,22];
+        lobeAngles.forEach(a=>{
+          const path = teardropPath(baseX, baseY+14, 16, 30);
+          lobes += rotatePath(`<path d="${path}" fill="${bellCol}" opacity="0.9" stroke="rgba(0,0,0,.08)" stroke-width="0.6"/>`, baseX, baseY+14, a);
+        });
+        const rim = `<ellipse cx="${baseX}" cy="${baseY+4}" rx="14" ry="5" fill="${bellCol}" opacity="0.9"/>`;
+        return peduncle + rim + lobes;
+      }
+      return "";
+    }
+    const lowerLeft = !!p.lowerLeafLeft;
+    const lowerY = p.leaf1Y, upperY = p.leaf2Y;
+    const leftLeafPath = (y,color)=> `<path d="M60 ${y} C35 ${y-5}, 35 ${y-15}, 60 ${y-18}" fill="${color}"/>`;
+    const rightLeafPath = (y,color)=> `<path d="M60 ${y} C85 ${y-5}, 85 ${y-15}, 60 ${y-18}" fill="${color}"/>`;
+    const leafLower = lowerLeft ? leftLeafPath(lowerY,"#86efac") : rightLeafPath(lowerY,"#86efac");
+    const leafUpper = lowerLeft ? rightLeafPath(upperY,"#22c55e") : leftLeafPath(upperY,"#22c55e");
+
+    return `<svg viewBox="0 0 120 140" style="width:100%; height:144px; overflow:visible">
+      ${potSVG(p.potStyle)}
+      ${stemPath}
+      ${growth>33? leafLower : ''}
+      ${growth>66? leafUpper : ''}
+      ${growth>=100? `<g>${petals(p.flowerStyle)}</g>` : ''}
+    </svg>`;
+  }
+
+  function plantCard(p,i){
+    const now = Date.now();
+    const postLeft = Math.max(0, Math.ceil((state.postPauseUntil - now)/1000));
+    const inPostPause = now < state.postPauseUntil;
+    const canAct = state.sessionActive && (state.day.actionsRemaining>0 || state.unlimitedActions) && now>=state.cooldownUntil && !inPostPause && (p.styleLocked || p.growth>0);
+    const buttonLabel = inPostPause ? String(postLeft) : "Tend";
+    const localPlace = p.readyToPlace ? `<div class="sign" style="margin-top:10px"><div class="title">🎉 Congratulations!</div><p>Your flower has reached maturity.</p><div class="row" style="margin-top:8px"><button class="btn primary" data-action="place-here" data-index="${i}">Place on windowsill</button></div></div>` : '';
+    return `<div class="card" data-plant-index="${i}"><div class="content">
+      <div class="small">Plant ${i+1}</div>
+      ${plantSVG(p)}
+      ${progressBar(p.growth)}
+      <div class="small">Growth: ${Math.round(p.growth)}%</div>
+      ${(p.growth===0 && !p.styleLocked) ? `<div class="grid" style="grid-template-columns:1fr 1fr; gap:8px; margin-top:8px">
+          <div><div class="small">Flower style</div><select data-action="set-style" data-index="${i}" class="input">
+              ${["daisy","tulip","sunflower","lotus","bell"].map(st=> `<option value="${st}" ${p.flowerStyle===st?'selected':''}>${st[0].toUpperCase()+st.slice(1)}</option>`).join('')}
+          </select></div>
+          <div><div class="small">Color</div><select data-action="set-color" data-index="${i}" class="input">
+              ${STYLE_COLORS[p.flowerStyle].map(c=> `<option value="${c}" ${p.flowerColor===c?'selected':''}>${c[0].toUpperCase()+c.slice(1)}</option>`).join('')}
+          </select></div>
+        </div>
+        <div class="grid" style="grid-template-columns:1fr; gap:8px; margin-top:8px">
+          <div><div class="small">Pot style</div><select data-action="set-pot" data-index="${i}" class="input">
+              ${["terracotta","striped","ceramic","classic"].map(ps=> `<option value="${ps}" ${p.potStyle===ps?'selected':''}>${ps[0].toUpperCase()+ps.slice(1)}</option>`).join('')}
+          </select></div>
+        </div>
+        <div class="row" style="margin-top:8px"><button class="btn secondary" data-action="lock-type" data-index="${i}">Lock selections</button></div>`
+        : `<div class="small" style="margin-top:8px">${p.readyToPlace ? 'Fully grown.' : 'Growing steadily…'}</div>`}
+      <div class="row" style="margin-top:10px"><button class="btn primary" data-action="tend" data-index="${i}" ${!canAct?'disabled':''}>${buttonLabel}</button></div>
+      ${localPlace}
+    </div></div>`;
+  }
+
+  function curtains(){ return `<div class="curtain-wrap">
+      <svg class="curtain-svg left" viewBox="0 0 56 280" preserveAspectRatio="none">
+        <path d="M0 0 L36 0 C28 20,46 40,36 60 C28 80,46 100,36 120 C28 140,46 160,36 180 C28 200,46 220,36 240 C28 260,46 280,36 300 L0 300 Z" fill="rgba(255,255,255,.7)"/>
+        <path d="M0 0 L36 0 C30 20,44 40,36 60 C30 80,44 100,36 120 C30 140,44 160,36 180 C30 200,44 220,36 240 C30 260,44 280,36 300 L0 300 Z" fill="rgba(255,255,255,.55)"/>
+      </svg>
+      <svg class="curtain-svg right" viewBox="0 0 56 280" preserveAspectRatio="none">
+        <path d="M0 0 L36 0 C28 20,46 40,36 60 C28 80,46 100,36 120 C28 140,46 160,36 180 C28 200,46 220,36 240 C28 260,46 280,36 300 L0 300 Z" fill="rgba(255,255,255,.7)"/>
+        <path d="M0 0 L36 0 C30 20,44 40,36 60 C30 80,44 100,36 120 C30 140,44 160,36 180 C30 200,44 220,36 240 C30 260,44 280,36 300 L0 300 Z" fill="rgba(255,255,255,.55)"/>
+      </svg>
+      <svg class="valance-svg" viewBox="0 0 600 44" preserveAspectRatio="none">
+        <path d="M0 0 H600 V24 C560 34,520 34,480 24 C440 14,400 14,360 24 C320 34,280 34,240 24 C200 14,160 14,120 24 C80 34,40 34,0 24 Z" fill="rgba(255,255,255,.75)"/>
+        <path d="M0 0 H600 V20 C560 30,520 30,480 20 C440 10,400 10,360 20 C320 30,280 30,240 20 C200 10,160 10,120 20 C80 30,40 30,0 20 Z" fill="rgba(255,255,255,.6)"/>
+      </svg></div>`; }
+
+  function cloud(w){ return `<div class="cloud" style="width:${w}px; height:${w*0.5}px">
+    <div class="b" style="left:10%;top:30%;width:40%;height:55%"></div>
+    <div class="b" style="left:35%;top:15%;width:45%;height:70%"></div>
+    <div class="b" style="left:55%;top:35%;width:30%;height:50%"></div>
+    <div class="b" style="left:0%;top:40%;width:25%;height:45%"></div>
+  </div>`; }
+
+  function buildStars(n=90){
+    const container = document.createElement('div'); container.className='stars';
+    for(let i=0;i<n;i++){ const s=document.createElement('div'); const size=Math.random()<0.85?2:3; s.style.cssText=`position:absolute;width:${size}px;height:${size}px;border-radius:50%;background:rgba(255,255,255,.9);left:${Math.round(Math.random()*100)}%;top:${Math.round(Math.random()*70)}%`; container.appendChild(s); }
+    return container;
+  }
+
+  function windowsill(){
+    const g = state.gallery||[];
+    let changed=false;
+    const plants = g.map((gp, idx, arr)=>{
+      let hRatio = gp.galleryH;
+      if (hRatio==null){
+        const base = (TYPE_HEIGHT[gp.flowerStyle||'daisy']||0.42);
+        const tier = Math.floor(Math.random()*HEIGHT_STEPS.length);
+        hRatio = Math.max(0.34, Math.min(0.62, base + HEIGHT_STEPS[tier]));
+        gp.galleryH=hRatio; gp.heightTier=tier; changed=true;
+      }
+      let x = gp.xPct; if (x==null){ x = ( (idx+1)/(arr.length+1) * 94 + 3 ); gp.xPct=x; changed=true; }
+      // Left px will be computed after mount
+      return `<div class="drag-plant ${state.arrangeMode? 'is-arrange':''}" data-gindex="${idx}" data-xpct="${x}" style="height: calc(var(--win-h) * ${hRatio}); left:0px;">
+        <div style="width:100%; height:92%; display:flex; align-items:flex-end; justify-content:center; overflow:visible">
+          <div>${plantSVG({...gp, growth:100})}</div>
+        </div>
+      </div>`;
+    }).join('');
+    if (changed) save();
+
+    const starContainer = buildStars();
+    return `<div class="card"><div class="content">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px">
+        <div style="font-weight:600">Windowsill</div>
+        <button class="btn secondary" data-action="toggle-arrange">${state.arrangeMode? 'Done':'Arrange plants'}</button>
+      </div>
+      <div class="window" id="window-el">
+        <div class="sky" id="sky-bg"></div>
+        <div id="sun" class="sun"></div>
+        <div id="moon" class="moon"></div>
+        <div id="clouds1" class="cloud-band" style="top: 40px; animation: cloudRL1 120s linear infinite">${cloud(110)} ${cloud(150)} ${cloud(100)}</div>
+        <div id="clouds2" class="cloud-band" style="top: calc(((var(--win-h) - var(--ground-h)) * 0.35) - 60px); animation: cloudRL2 180s linear infinite">${cloud(130)} ${cloud(90)}</div>
+        <div class="ground"></div>
+        <div class="mullion-h"></div><div class="mullion-v"></div><div class="frame"></div><div class="sill"></div>
+        ${curtains()}
+        ${starContainer.outerHTML}
+        <div class="window-inner">
+          <div class="gallery-layer" id="gallery-layer">${plants}</div>
+        </div>
+      </div>
+    </div></div>`;
+  }
+
+  function breathingCards(){
+    const now = Date.now();
+    const showPrep = state.sessionActive && state.config.breathingEnabled && state.breathPrepUntil > now;
+    const showBreath = state.sessionActive && state.config.breathingEnabled && state.cooldownUntil > now && state.breathPrepUntil===0;
+    let out='';
+    if (showPrep){
+      const secLeft = Math.max(0, Math.ceil((state.breathPrepUntil - now)/1000));
+      out += `<div class="card"><div class="content" style="text-align:center">
+        <div style="font-weight:600">Get ready to breathe</div>
+        <div class="small-note">Starting in ${secLeft}…</div></div></div>`;
+    }
+    if (showBreath){
+      const phases = state.config.breathPhases; const total = phases.reduce((a,b)=>a+b,0);
+      const elapsed = Math.max(0, total - (state.cooldownUntil - now)/1000);
+      const cum = [phases[0], phases[0]+phases[1], phases[0]+phases[1]+phases[2]];
+      let idx=0; for(let i=0;i<cum.length;i++){ if (elapsed<cum[i]){ idx=i; break; } }
+      const names=["Inhale","Hold","Exhale"]; const phaseStart=(idx===0?0:cum[idx-1]); const phaseLen=phases[idx];
+      const secLeft = Math.max(0, Math.ceil(phaseLen - (elapsed - phaseStart)));
+      const minSize=24, maxSize=56; const prog = Math.max(0, Math.min(1, (elapsed - phaseStart)/phaseLen ));
+      let size = (idx===0)? (minSize + (maxSize-minSize)*prog) : (idx===1? maxSize : (minSize + (maxSize-minSize)*(1-prog)));
+      const counts = Array.from({length:secLeft},(_,i)=> secLeft-i-1).filter(x=>x>=0).map(x=>` ${x}…`).join('');
+      out += `<div class="card"><div class="content" style="text-align:center">
+        <div style="font-weight:600">Mindful pause</div>
+        <div style="width:160px;height:160px;border:2px solid #94a3b8;margin:8px auto;border-radius:12px;display:flex;align-items:center;justify-content:center">
+          <div style="width:${size}px;height:${size}px;border-radius:999px;background:rgba(16,185,129,.25);transition:width .2s,height .2s"></div>
+        </div>
+        <div>${names[idx]} ${secLeft} sec<span class="small-note">${counts}</span></div>
+      </div></div>`;
+    }
+    if (state.lastFact){ out += `<div class="sign"><div class="title">Garden note</div><p>💡 ${state.lastFact}</p></div>`; }
+    return out;
+  }
+
+  function statusBar(){
+    const {h, m} = parseUnlockTime();
+    return `<div class="card"><div class="content">
+      <div class="status-grid">
+        <div class="status-item">
+          <div class="label">Today</div><div class="value">${state.day.date}</div>
+          <div class="row" style="margin-top:6px">
+            <button class="btn primary" data-action="start" ${state.sessionActive || isLocked() || (state.day.actionsRemaining<=0 && !state.unlimitedActions) ? 'disabled':''}>Start Session</button>
+            <button class="btn secondary" data-action="end" ${!state.sessionActive ? 'disabled':''}>End Session</button>
+          </div>
+        </div>
+        <div class="status-item"><div class="label">Actions left</div><div class="value">${state.unlimitedActions? '∞ (dev)' : Math.max(0, Math.ceil(state.day.actionsRemaining))}</div></div>
+        <div class="status-item"><div class="label">Streak</div><div class="value">${state.streak} day${state.streak===1?'':'s'}</div></div>
+        <div class="status-item"><div class="label">Concurrent plants</div><div class="value">${state.plantSlots} / 4</div></div>
+        <div class="status-item"><div class="label">Breathing</div><div class="value">${state.config.breathingEnabled? 'On':'Off'}</div></div>
+        <div class="status-item"><div class="label">Daily unlock</div><div class="value">${toAmPm(h, m)}</div></div>
+      </div>
+    </div></div>`;
+  }
+
+  function unlockNotice(){
+    if (!isLocked()) return '';
+    const ms = nextUnlock().getTime() - Date.now(); const s = Math.max(0, Math.floor(ms/1000)); const m = Math.floor(s/60), r = s%60;
+    return `<div class="card"><div class="content small-note">Content unlocks daily at ${state.config.unlockTimeText}. Next unlock in ${fmt2(m)}:${fmt2(r)}.</div></div>`;
+  }
+
+  function generalSettings(){
+    const [inh,hold,exh] = state.config.breathPhases;
+    return `<div class="card"><div class="content">
+      <div style="font-weight:600; margin-bottom:8px">Settings</div>
+      <div class="row" style="gap:12px">
+        <label class="row" style="gap:6px"><input type="checkbox" data-action="toggle-breath" ${state.config.breathingEnabled?'checked':''}><span class="small">Breathing enabled</span></label>
+        <label class="row" style="gap:6px"><span class="small">Turns between breaths</span><input class="input" type="number" style="width:90px" data-action="set-turns-between" value="${state.config.turnsBetweenBreaths}"></label>
+        <label class="row" style="gap:6px"><span class="small">Inhale</span><input class="input" type="number" style="width:70px" data-action="set-inhale" value="${inh}"><span class="small">Hold</span><input class="input" type="number" style="width:70px" data-action="set-hold" value="${hold}"><span class="small">Exhale</span><input class="input" type="number" style="width:70px" data-action="set-exhale" value="${exh}"></label>
+      </div>
+      <div class="row" style="gap:12px; margin-top:10px">
+        <label class="row" style="gap:6px"><input type="checkbox" data-action="toggle-postpause" ${state.config.postActionPauseEnabled?'checked':''}><span class="small">Post-action pause</span></label>
+        <label class="row" style="gap:6px"><span class="small">Seconds</span><input class="input" type="number" style="width:90px" data-action="set-postpause-sec" value="${state.config.postActionPauseSec}"></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" data-action="soft-reset" style="border-color:#2563eb; color:#1d4ed8">Soft reset (today only)</button>
+        <button class="btn" data-action="reset-game" style="border-color:#ef4444; color:#b91c1c">Reset game (erase progress)</button>
+        <span class="small">Soft reset keeps your gallery & streaks; hard reset clears everything.</span>
+      </div>
+    </div></div>`;
+  }
+
+  function devSettings(){
+    const [inh,hold,exh] = state.config.breathPhases;
+    return `<div class="card"><div class="content">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px">
+        <div style="font-weight:600">Developer mode</div>
+        <label class="row" style="gap:6px"><input type="checkbox" data-action="toggle-dev-mode" ${state.devMode?'checked':''}><span class="small">Enable</span></label>
+      </div>
+      ${state.devMode ? `
+        <div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px">
+          <label><div class="small">Daily actions</div><input class="input" type="number" data-action="set-daily-actions" value="${state.config.dailyActions}"></label>
+          <label><div class="small">Actions to mature</div><input class="input" type="number" data-action="set-actions-mature" value="${state.config.actionsToMature}"></label>
+          <label><div class="small">Unlimited actions</div><div class="row"><input type="checkbox" data-action="toggle-unlimited" ${state.unlimitedActions?'checked':''}><span class="small">Enable</span></div></label>
+        </div>
+        <div class="grid" style="grid-template-columns:1fr; gap:12px; margin-top:8px">
+          <label><div class="small">Time of day (simulated)</div>
+            <input type="range" min="0" max="24" step="0.05" value="${state.devSliderHour}" data-action="set-dev-hour" style="width:100%">
+            <div class="small">Current: ${formatHour(state.devSliderHour)}</div>
+          </label>
+        </div>
+        <div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:8px">
+          <label><div class="small">Advance days</div><div class="row"><input class="input" type="number" min="1" step="1" value="1" data-action="dev-advance-days"><button class="btn secondary" data-action="do-advance-days">Advance</button></div></label>
+          <label><div class="small">Add plant slot</div><div class="row"><button class="btn secondary" data-action="add-plant">Add (+1 up to 4)</button></div></label>
+          <div></div>
+        </div>
+        <div class="small" style="margin-top:8px">Breathing: <strong>${state.config.breathingEnabled? 'enabled':'disabled'}</strong>, every ${state.config.turnsBetweenBreaths} turns; ${inh}-${hold}-${exh}s. Post-action pause: ${state.config.postActionPauseEnabled? state.config.postActionPauseSec + 's':'off'}.</div>
+      }` : `<div class="small">Turn on Developer mode for extra controls (time slider, unlimited actions, etc.).</div>`}
+    </div></div>`;
+  }
+
+  function formatHour(h){ const hh=Math.floor(h); const mm=Math.round((h-hh)*60); const period = hh>=12 ? "p.m." : "a.m."; const dispH = ((hh%12)||12); return `${dispH}:${fmt2(mm)} ${period}`; }
+  function settingsPanel(){ return `${generalSettings()}${devSettings()}`; }
+  function footerNote(){ return `<div class="small-note">Arrange positioning is now pixel-based and clamped to the gallery width—no clipping or “shrink” at any screen size.</div>`; }
+
+  function softResetToday(){
+    const ok = confirm("Soft reset today? Keeps gallery & streaks; resets today's plants and actions.");
+    if (!ok) return;
+    state.day = { date: todayKey(), actionsRemaining: state.config.dailyActions, plants: Array.from({length: state.plantSlots}, ()=> DEFAULT_PLANT()), playedToday:false };
+    state.sessionActive=false; state.cooldownUntil=0; state.breathPrepUntil=0; state.postPauseUntil=0; state.actionCount=0; state.lastFact='';
+    save(); render();
+  }
+  function hardResetGame(){
+    const ok = confirm("Reset Mind Garden? This will erase all progress and settings.");
+    if (!ok) return;
+    try{ Object.keys(localStorage).filter(k=>k.startsWith('mind-garden')).forEach(k=>localStorage.removeItem(k)); }catch(e){ console.warn(e); }
+    location.reload();
+  }
+
+  function positionPlantsFromPct(){
+    const gallery = document.getElementById('gallery-layer');
+    if (!gallery) return;
+    const rect = gallery.getBoundingClientRect();
+    const els = gallery.querySelectorAll('.drag-plant');
+    els.forEach((el, idx)=>{
+      const xPct = (state.gallery[idx] && typeof state.gallery[idx].xPct==='number') ? state.gallery[idx].xPct : +el.getAttribute('data-xpct') || 50;
+      const centerX = (xPct/100) * rect.width;
+      const w = el.getBoundingClientRect().width || 0;
+      let leftPx = centerX - w/2;
+      leftPx = Math.max(0, Math.min(rect.width - w, leftPx));
+      el.style.left = leftPx + 'px';
+    });
+  }
+
+  function bind(){
+    const app = document.getElementById('app');
+    app.querySelectorAll('[data-action]').forEach(node=>{
+      const action = node.getAttribute('data-action');
+      node.addEventListener('click', (ev)=>{
+        if (action==='start') startSession();
+        else if (action==='end') endSession();
+        else if (action==='tend') tend(+node.getAttribute('data-index'));
+        else if (action==='place-here'){ const i=+node.getAttribute('data-index'); placePlantFromIndex(i, (state.gallery?.length||0)); }
+        else if (action==='toggle-arrange'){ state.arrangeMode=!state.arrangeMode; save(); render(); }
+        else if (action==='do-advance-days'){ const input = app.querySelector('[data-action="dev-advance-days"]'); const n = Math.max(1, parseInt(input.value||'1',10)); state.streak += n; state.day.playedToday=false; save(); render(); }
+        else if (action==='add-plant'){ addPlantSlot(); save(); render(); }
+        else if (action==='reset-game'){ hardResetGame(); }
+        else if (action==='soft-reset'){ softResetToday(); }
+        else if (action==='lock-type'){ const i=+node.getAttribute('data-index'); const p=state.day.plants[i]; if (p.flowerStyle==='bell' && (p.bellDir==null)) p.bellDir = (Math.random()<0.5?-1:1); p.styleLocked=true; save(); render(); }
+      });
+    });
+
+    // style/color linkage
+    app.querySelectorAll('select[data-action="set-style"]').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        const i = +sel.getAttribute('data-index');
+        const newStyle = sel.value;
+        const p = state.day.plants[i];
+        p.flowerStyle = newStyle;
+        const allowed = STYLE_COLORS[newStyle] || ["pink"];
+        p.flowerColor = allowed[0];
+        if (newStyle==='bell' && (p.bellDir==null)) p.bellDir = (Math.random()<0.5?-1:1);
+        save(); render();
+      });
+    });
+    app.querySelectorAll('select[data-action="set-color"]').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        const i = +sel.getAttribute('data-index');
+        const chosen = sel.value;
+        const style = state.day.plants[i].flowerStyle;
+        const allowed = STYLE_COLORS[style] || [];
+        if (allowed.includes(chosen)){
+          state.day.plants[i].flowerColor = chosen;
+          save();
+        } else {
+          state.day.plants[i].flowerColor = allowed[0] || chosen;
+          save(); render();
+        }
+      });
+    });
+    app.querySelectorAll('select[data-action="set-pot"]').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        const i = +sel.getAttribute('data-index');
+        state.day.plants[i].potStyle = sel.value;
+        save(); render();
+      });
+    });
+
+    const tb = app.querySelector('[data-action="set-turns-between"]');
+    if (tb) tb.addEventListener('input', ()=>{ state.config.turnsBetweenBreaths = Math.max(1, +tb.value||1); save(); });
+
+    const br = app.querySelector('[data-action="toggle-breath"]');
+    if (br) br.addEventListener('change', ()=>{ state.config.breathingEnabled = br.checked; save(); renderRightRailOnly(); });
+
+    const inh = app.querySelector('[data-action="set-inhale"]');
+    if (inh) inh.addEventListener('input', ()=>{ state.config.breathPhases[0] = Math.max(1, +inh.value||1); save(); renderRightRailOnly(); });
+    const hld = app.querySelector('[data-action="set-hold"]');
+    if (hld) hld.addEventListener('input', ()=>{ state.config.breathPhases[1] = Math.max(0, +hld.value||0); save(); renderRightRailOnly(); });
+    const exh = app.querySelector('[data-action="set-exhale"]');
+    if (exh) exh.addEventListener('input', ()=>{ state.config.breathPhases[2] = Math.max(1, +exh.value||1); save(); renderRightRailOnly(); });
+
+    const pp = app.querySelector('[data-action="toggle-postpause"]');
+    if (pp) pp.addEventListener('change', ()=>{ state.config.postActionPauseEnabled = pp.checked; if (!pp.checked){ state.postPauseUntil=0; state.__ppActive=false; } save(); });
+
+    const pps = app.querySelector('[data-action="set-postpause-sec"]');
+    if (pps) pps.addEventListener('input', ()=>{ state.config.postActionPauseSec = Math.max(0, +pps.value||0); save(); });
+
+    const dm = app.querySelector('[data-action="toggle-dev-mode"]');
+    if (dm) dm.addEventListener('change', ()=>{ state.devMode = dm.checked; save(); render(); });
+
+    const da = app.querySelector('[data-action="set-daily-actions"]');
+    if (da) da.addEventListener('input', ()=>{ state.config.dailyActions = Math.max(1, +da.value||0); if (!state.unlimitedActions) state.day.actionsRemaining = state.config.dailyActions; save(); });
+
+    const atm = app.querySelector('[data-action="set-actions-mature"]');
+    if (atm) atm.addEventListener('input', ()=>{ state.config.actionsToMature = Math.max(1, +atm.value||1); save(); });
+
+    const ua = app.querySelector('[data-action="toggle-unlimited"]');
+    if (ua) ua.addEventListener('change', ()=>{ state.unlimitedActions = ua.checked; save(); render(); });
+
+    const dh = app.querySelector('[data-action="set-dev-hour"]');
+    if (dh) dh.addEventListener('input', ()=>{ state.devSliderHour = +dh.value; save(); positionAstronomy(); });
+
+    // DRAG along sill (X only) in arrange mode — pixel-based left positioning
+    const win = app.querySelector('#window-el');
+    const gallery = app.querySelector('#gallery-layer');
+    let draggingIdx = null;
+
+    function clientX(evt){ return (evt.touches && evt.touches[0]?.clientX) || evt.clientX; }
+
+    function onDown(evt){
+      if (!state.arrangeMode) return;
+      const target = evt.target.closest('.drag-plant');
+      if (!target) return;
+      draggingIdx = +target.getAttribute('data-gindex');
+      target.classList.add('dragging');
+      evt.preventDefault();
+    }
+    function onMove(evt){
+      if (draggingIdx==null || !state.arrangeMode) return;
+      const rect = gallery.getBoundingClientRect();
+      const el = gallery.querySelector('.drag-plant[data-gindex="'+draggingIdx+'"]');
+      if (!el) return;
+      const w = el.getBoundingClientRect().width || 0;
+      const cx = clamp(clientX(evt) - rect.left, 0, rect.width);   // center X in gallery space
+      let leftPx = cx - w/2;
+      leftPx = Math.max(0, Math.min(rect.width - w, leftPx));
+      el.style.left = leftPx + 'px';
+      const xPct = (cx / rect.width) * 100;
+      if (state.gallery[draggingIdx]) state.gallery[draggingIdx].xPct = xPct;
+    }
+    function onUp(){
+      if (draggingIdx==null) return;
+      const el = gallery.querySelector('.drag-plant[data-gindex="'+draggingIdx+'"]');
+      if (el){ el.classList.remove('dragging'); }
+      draggingIdx = null;
+      save();
+    }
+    win.addEventListener('mousedown', onDown);
+    win.addEventListener('touchstart', onDown, {passive:false});
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('touchmove', onMove, {passive:false});
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchend', onUp);
+
+    // After mount & resize, position from stored xPct
+    positionPlantsFromPct();
+    window.addEventListener('resize', positionPlantsFromPct);
+  }
+
+  function getCssNumber(varName){ const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); return parseFloat(v.replace('px','')); }
+  function nowHour(){ if (state.devMode) return state.devSliderHour; const now = new Date(); return now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600; }
+  function positionAstronomy(){
+    const winH = getCssNumber('--win-h'), groundH=getCssNumber('--ground-h');
+    const grassTopPct = ((winH - groundH)/winH)*100;
+    const sun=document.getElementById('sun'), moon=document.getElementById('moon'), sky=document.getElementById('sky-bg');
+    const clouds1=document.getElementById('clouds1'), clouds2=document.getElementById('clouds2'), stars=document.querySelector('.stars');
+    const hour = nowHour();
+    const dayT = Math.max(0, Math.min(1, (hour - SUNRISE_H)/(SUNSET_H - SUNRISE_H) ));
+    const xSun = 1.5 + 97*dayT, amp=28, ySun = grassTopPct - amp*Math.sin(Math.PI*dayT);
+    let nightT; if (hour>=SUNSET_H) nightT = (hour - SUNSET_H)/(24 - SUNSET_H + SUNRISE_H); else if (hour<SUNRISE_H) nightT = (hour + (24 - SUNSET_H))/(24 - SUNSET_H + SUNRISE_H); else nightT=0; nightT=Math.max(0, Math.min(1, nightT));
+    const xMoon = 98.5 - 97*nightT, yMoon = grassTopPct - amp*Math.sin(Math.PI*nightT);
+    if (sun){ sun.style.left = xSun+'%'; sun.style.top = ySun+'%'; }
+    if (moon){ moon.style.left = xMoon+'%'; moon.style.top = yMoon+'%'; }
+    function twilightFactor(centerHour){ const diff=Math.abs(hour-centerHour); if (diff>0.5) return 0; return 0.5*(1+Math.cos(Math.PI*(diff/0.5))); }
+    const dusk=twilightFactor(SUNSET_H), dawn=twilightFactor(SUNRISE_H);
+    let darkBase = (hour < SUNRISE_H || hour >= SUNSET_H) ? 1 : 0;
+    const darkness = Math.max(0, Math.min(1, darkBase + dusk*(1-darkBase) - dawn*darkBase ));
+    if (sky){
+      const dayTop = getComputedStyle(document.documentElement).getPropertyValue('--sky1').trim();
+      const dayBot = getComputedStyle(document.documentElement).getPropertyValue('--sky2').trim();
+      const nightTop='#071a3a', nightBot='#0b2447';
+      function mix(c1,c2,t){ function hexToRgb(h){h=h.replace('#',''); return {r:parseInt(h.slice(0,2),16), g:parseInt(h.slice(2,4),16), b:parseInt(h.slice(4,6),16)};}
+        function rgbToHex(r,g,b){const H=(n)=>n.toString(16).padStart(2,'0'); return '#'+H(r)+H(g)+H(b);}
+        const a=hexToRgb(c1), b=hexToRgb(c2);
+        return rgbToHex(Math.round(a.r+(b.r-a.r)*t), Math.round(a.g+(b.g-a.g)*t), Math.round(a.b+(b.b-a.b)*t));
+      }
+      const top=mix(dayTop, nightTop, darkness), bot=mix(dayBot, nightBot, darkness);
+      sky.style.background = `linear-gradient(${top}, ${bot})`;
+    }
+    const cloudOpacity = 0.9*(1-darkness);
+    if (clouds1) clouds1.style.opacity = cloudOpacity;
+    if (clouds2) clouds2.style.opacity = cloudOpacity;
+    if (stars) stars.style.opacity = darkness;
+    if (sun)  sun.style.opacity  = (dayT>0 && dayT<1) ? (0.9 * (1 - dusk)) : 0;
+    if (moon) moon.style.opacity = (nightT>0 && nightT<1) ? (0.8 * (1 - dawn)) : 0;
+  }
+
+  function gardenAndRail(){ return gardenAndRail._html(); }
+  gardenAndRail._html = function(){
+    if (state.day.plants.length > state.plantSlots) state.day.plants = state.day.plants.slice(0,state.plantSlots);
+    if (state.day.plants.length < state.plantSlots) while (state.day.plants.length<state.plantSlots) state.day.plants.push(DEFAULT_PLANT());
+
+    const left = `<div class="plants-grid">${state.day.plants.map(plantCard).join('')}</div>`;
+    const right = breathingCards() + (state.pendingPlantUnlock ? `<div class="card" style="margin-top:8px"><div class="content">
+      <div style="font-weight:600">🌿 7-day streak! Add another plant?</div>
+      <div class="small-note" style="margin-top:4px">You can tend up to ${MAX_PLANTS} plants total.</div>
+      <div class="row" style="margin-top:8px"><button class="btn primary" data-action="add-plant">Add plant</button><button class="btn secondary" data-action="dismiss-unlock">Not now</button></div>
+    </div></div>` : '');
+    return `<div class="two-col"><div>${left}</div><div class="sticky" id="right-rail">${right}</div></div>`;
+  };
+
+  function renderRightRailOnly(){ const rail=document.getElementById('right-rail'); if (rail) rail.innerHTML = breathingCards() + (state.pendingPlantUnlock ? `<div class="card" style="margin-top:8px"><div class="content"><div style="font-weight:600">🌿 7-day streak! Add another plant?</div><div class="row" style="margin-top:8px"><button class="btn primary" data-action="add-plant">Add plant</button><button class="btn secondary" data-action="dismiss-unlock">Not now</button></div></div></div>`:''); }
+
+  function render(){
+    const app = document.getElementById('app');
+    app.innerHTML = `<h1>Mind Garden <span class="tag">Prototype</span></h1>${statusBar()}${unlockNotice()}${gardenAndRail()}${windowsill()}${settingsPanel()}${footerNote()}`;
+    bind(); positionAstronomy();
+  }
+
+  // Tick
+  setInterval(()=>{
+    positionAstronomy();
+    const now = Date.now();
+    if (now < state.postPauseUntil) {
+      if (!state.__ppActive) state.__ppActive = true;
+      render();
+    } else {
+      if (state.__ppActive) {
+        state.__ppActive = false;
+        render();
+      } else {
+        renderRightRailOnly();
+      }
+    }
+  }, 300);
+
+  render();
+})();</script>
+</body>
+</html>
