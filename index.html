@@ -87,7 +87,7 @@
 
 <script>
 (function(){
-  const SUNRISE_H = 7, SUNSET_H = 19, MAX_PLANTS = 4;
+  const SUNRISE_H = 7, SUNSET_H = 19; // single-plant mode
   const FALLBACK_LOC = { lat:41.8781, lon:-87.6298 }; // Chicago fallback
   const fmt2 = (n)=> String(n).padStart(2,'0');
   const toAmPm = (h,m)=>{ const period = h>=12 ? "p.m." : "a.m."; const hh = h%12===0? 12 : h%12; return hh+":"+fmt2(m)+" "+period; };
@@ -166,14 +166,7 @@
       if (!s.day || s.day.date!==today){
         s.day = { date: today, actionsRemaining: (s.config?.dailyActions||DEFAULT_CONFIG.dailyActions), plants: s.day?.plants || [DEFAULT_PLANT()], playedToday:false };
       }
-      s.day.plants = (s.day.plants||[]).map(p=> ({ lowerLeafLeft: (p.lowerLeafLeft!=null?p.lowerLeafLeft:(Math.random()<0.5)), bellDir:(p.bellDir!=null?p.bellDir:(Math.random()<0.5?-1:1)), ...p }));
-      if (!s.config) s.config = {...DEFAULT_CONFIG};
-      if (!('actionsToMature' in s.config)) s.config.actionsToMature = 30;
-      if (!('postActionPauseEnabled' in s.config)) s.config.postActionPauseEnabled = true;
-      if (!('postActionPauseSec' in s.config)) s.config.postActionPauseSec = 3;
       if (!s.gallery) s.gallery = [];
-      if (!s.location) s.location = { geoEnabled:false, coords:null, denied:false };
-      if (!('devTimeOverride' in s)) s.devTimeOverride = false;
       s.gallery = s.gallery.map((gp,i,arr)=> {
         let base = (TYPE_HEIGHT[gp.flowerStyle||'daisy']||0.42);
         let tier = (gp.heightTier!=null? gp.heightTier : Math.floor(Math.random()*HEIGHT_STEPS.length));
@@ -181,19 +174,43 @@
         if (gp.galleryH!=null) h = gp.galleryH; // preserve existing
         return { xPct: (gp.xPct!=null? gp.xPct : ( (i+1)/(arr.length+1) * 94 + 3 ) ), galleryH: Math.max(0.34, Math.min(0.62, h)), heightTier: tier, ...gp };
       });
-      if (!s.plantSlots) s.plantSlots = Math.min(4, s.day?.plants?.length || 1);
-      if (s.plantSlots<1) s.plantSlots = 1;
+      s.day.plants = (s.day.plants||[]).map(p=> ({ lowerLeafLeft: (p.lowerLeafLeft!=null?p.lowerLeafLeft:(Math.random()<0.5)), bellDir:(p.bellDir!=null?p.bellDir:(Math.random()<0.5?-1:1)), ...p }));
+      if (s.day.plants.length>1){
+        const [first,...rest] = s.day.plants;
+        s.day.plants = [first];
+        // Single-plant mode: move completed extras to gallery
+        rest.forEach(p=>{
+          if ((p.growth||0)>=100){
+            const g = s.gallery;
+            const base = TYPE_HEIGHT[p.flowerStyle||'daisy']||0.42;
+            const tier = Math.floor(Math.random()*HEIGHT_STEPS.length);
+            const h = Math.max(0.34, Math.min(0.62, base + HEIGHT_STEPS[tier]));
+            const index = g.length;
+            const xPct = (g.length===0)? 50 : Math.max(3, Math.min(97, ( (index+1)/(g.length+1) * 94 + 3 )));
+            g.splice(index,0,{...p, galleryH:h, heightTier:tier, xPct});
+          }
+        });
+      }
+      if (s.day.plants.length===0) s.day.plants=[DEFAULT_PLANT()];
+      if (!s.config) s.config = {...DEFAULT_CONFIG};
+      if (!('actionsToMature' in s.config)) s.config.actionsToMature = 30;
+      if (!('postActionPauseEnabled' in s.config)) s.config.postActionPauseEnabled = true;
+      if (!('postActionPauseSec' in s.config)) s.config.postActionPauseSec = 3;
+      if (!s.location) s.location = { geoEnabled:false, coords:null, denied:false };
+      if (!('devTimeOverride' in s)) s.devTimeOverride = false;
       s.sessionActive=false; s.cooldownUntil=0; s.breathPrepUntil=0; s.postPauseUntil=0; s.actionCount=0; s.lastFact=''; s.arrangeMode=false;
-      s.unlimitedActions=false; s.devMode=false; s.devSliderHour=13.0; s.pendingPlantUnlock=false;
+      s.unlimitedActions=false; s.devMode=false; s.devSliderHour=13.0;
       s.__ppActive=false;
+      delete s.plantSlots; // single-plant mode: no slots
+      delete s.pendingPlantUnlock; // remove streak unlock flag
       return s;
     }catch{ return fresh(); }
   })();
 
   function fresh(){
     return { config:{...DEFAULT_CONFIG}, day:{ date: todayKey(), actionsRemaining: DEFAULT_CONFIG.dailyActions, plants: [DEFAULT_PLANT()], playedToday:false },
-      plantSlots:1, streak:0, lastPlayDate:null, gallery:[], sessionActive:false, cooldownUntil:0, breathPrepUntil:0, postPauseUntil:0, actionCount:0, lastFact:'',
-      arrangeMode:false, unlimitedActions:false, devMode:false, devSliderHour:13.0, devTimeOverride:false, pendingPlantUnlock:false, __ppActive:false,
+      streak:0, lastPlayDate:null, gallery:[], sessionActive:false, cooldownUntil:0, breathPrepUntil:0, postPauseUntil:0, actionCount:0, lastFact:'',
+      arrangeMode:false, unlimitedActions:false, devMode:false, devSliderHour:13.0, devTimeOverride:false, __ppActive:false,
       location:{ geoEnabled:false, coords:null, denied:false } };
   }
   function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
@@ -203,11 +220,8 @@
     const last = state.lastPlayDate, today = state.day.date;
     const y = new Date(); y.setDate(y.getDate()-1); const yesterdayKey = y.toISOString().slice(0,10);
     const newStreak = last===yesterdayKey ? (state.streak+1) : (last===today ? state.streak : (last ? 1 : 1));
-    const prevBuckets = Math.floor((state.streak||0)/7); const newBuckets  = Math.floor(newStreak/7);
-    state.day.playedToday = true; state.streak = newStreak; state.lastPlayDate = today;
-    if (newBuckets>prevBuckets && state.plantSlots<4){ state.pendingPlantUnlock = true; }
+    state.day.playedToday = true; state.streak = newStreak; state.lastPlayDate = today; // single-plant mode: removed slot unlock
   }
-  function addPlantSlot(){ if (state.plantSlots>=4) return; state.plantSlots += 1; state.day.plants.push(DEFAULT_PLANT()); state.pendingPlantUnlock=false; }
 
   function parseUnlockTime(){
     const s = state.config.unlockTimeText || "7:00 a.m.";
@@ -258,7 +272,10 @@
     afterAnyAction();
   }
   function placePlantFromIndex(i, index){
-    const p = state.day.plants[i]; if (!p || !p.readyToPlace) return; insertIntoGallery(p, index); state.day.plants[i] = DEFAULT_PLANT(); save(); render();
+    const p = state.day.plants[i]; if (!p || !p.readyToPlace) return;
+    insertIntoGallery(p, index);
+    state.day.plants[i] = DEFAULT_PLANT(); // single-plant loop: replace placed plant
+    save(); render();
   }
   function insertIntoGallery(plant, index){
     const g = state.gallery||[];
@@ -362,7 +379,7 @@
     const buttonLabel = inPostPause ? String(postLeft) : "Tend";
     const localPlace = p.readyToPlace ? `<div class="sign" style="margin-top:10px"><div class="title">🎉 Congratulations!</div><p>Your flower has reached maturity.</p><div class="row" style="margin-top:8px"><button class="btn primary" data-action="place-here" data-index="${i}">Place on windowsill</button></div></div>` : '';
     return `<div class="card" data-plant-index="${i}"><div class="content">
-      <div class="small">Plant ${i+1}</div>
+      <div class="small">Your plant</div>
       ${plantSVG(p)}
       ${progressBar(p.growth)}
       <div class="small">Growth: ${Math.round(p.growth)}%</div>
@@ -503,7 +520,6 @@
         </div>
         <div class="status-item"><div class="label">Actions left</div><div class="value">${state.unlimitedActions? '∞ (dev)' : Math.max(0, Math.ceil(state.day.actionsRemaining))}</div></div>
         <div class="status-item"><div class="label">Streak</div><div class="value">${state.streak} day${state.streak===1?'':'s'}</div></div>
-        <div class="status-item"><div class="label">Concurrent plants</div><div class="value">${state.plantSlots} / 4</div></div>
         <div class="status-item"><div class="label">Breathing</div><div class="value">${state.config.breathingEnabled? 'On':'Off'}</div></div>
         <div class="status-item"><div class="label">Daily unlock</div><div class="value">${toAmPm(h, m)}</div></div>
       </div>
@@ -564,10 +580,8 @@
             <div class="small">Current: ${formatHour(state.devSliderHour)}</div>
           </label>
         </div>
-        <div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:8px">
+        <div class="grid" style="grid-template-columns:1fr; gap:12px; margin-top:8px">
           <label><div class="small">Advance days</div><div class="row"><input class="input" type="number" min="1" step="1" value="1" data-action="dev-advance-days"><button class="btn secondary" data-action="do-advance-days">Advance</button></div></label>
-          <label><div class="small">Add plant slot</div><div class="row"><button class="btn secondary" data-action="add-plant">Add (+1 up to 4)</button></div></label>
-          <div></div>
         </div>
         <div class="small" style="margin-top:8px">Breathing: <strong>${state.config.breathingEnabled? 'enabled':'disabled'}</strong>, every ${state.config.turnsBetweenBreaths} turns; ${inh}-${hold}-${exh}s. Post-action pause: ${state.config.postActionPauseEnabled? state.config.postActionPauseSec + 's':'off'}.</div>
       }` : `<div class="small">Turn on Developer mode for extra controls (time slider, unlimited actions, etc.).</div>`}
@@ -579,9 +593,9 @@
   function footerNote(){ return `<div class="small-note">Arrange positioning is now pixel-based and clamped to the gallery width—no clipping or “shrink” at any screen size.</div>`; }
 
   function softResetToday(){
-    const ok = confirm("Soft reset today? Keeps gallery & streaks; resets today's plants and actions.");
+    const ok = confirm("Soft reset today? Keeps gallery & streaks; resets today's plant and actions.");
     if (!ok) return;
-    state.day = { date: todayKey(), actionsRemaining: state.config.dailyActions, plants: Array.from({length: state.plantSlots}, ()=> DEFAULT_PLANT()), playedToday:false };
+    state.day = { date: todayKey(), actionsRemaining: state.config.dailyActions, plants: [DEFAULT_PLANT()], playedToday:false };
     state.sessionActive=false; state.cooldownUntil=0; state.breathPrepUntil=0; state.postPauseUntil=0; state.actionCount=0; state.lastFact='';
     save(); render();
   }
@@ -618,7 +632,6 @@
         else if (action==='place-here'){ const i=+node.getAttribute('data-index'); placePlantFromIndex(i, (state.gallery?.length||0)); }
         else if (action==='toggle-arrange'){ state.arrangeMode=!state.arrangeMode; save(); render(); }
         else if (action==='do-advance-days'){ const input = app.querySelector('[data-action="dev-advance-days"]'); const n = Math.max(1, parseInt(input.value||'1',10)); state.streak += n; state.day.playedToday=false; save(); render(); }
-        else if (action==='add-plant'){ addPlantSlot(); save(); render(); }
         else if (action==='reset-game'){ hardResetGame(); }
         else if (action==='soft-reset'){ softResetToday(); }
         else if (action==='lock-type'){ const i=+node.getAttribute('data-index'); const p=state.day.plants[i]; if (p.flowerStyle==='bell' && (p.bellDir==null)) p.bellDir = (Math.random()<0.5?-1:1); p.styleLocked=true; save(); render(); }
@@ -889,19 +902,13 @@
 
   function gardenAndRail(){ return gardenAndRail._html(); }
   gardenAndRail._html = function(){
-    if (state.day.plants.length > state.plantSlots) state.day.plants = state.day.plants.slice(0,state.plantSlots);
-    if (state.day.plants.length < state.plantSlots) while (state.day.plants.length<state.plantSlots) state.day.plants.push(DEFAULT_PLANT());
-
+    if (state.day.plants.length > 1) state.day.plants = state.day.plants.slice(0,1); // single-plant mode
     const left = `<div class="plants-grid">${state.day.plants.map(plantCard).join('')}</div>`;
-    const right = breathingCards() + (state.pendingPlantUnlock ? `<div class="card" style="margin-top:8px"><div class="content">
-      <div style="font-weight:600">🌿 7-day streak! Add another plant?</div>
-      <div class="small-note" style="margin-top:4px">You can tend up to ${MAX_PLANTS} plants total.</div>
-      <div class="row" style="margin-top:8px"><button class="btn primary" data-action="add-plant">Add plant</button><button class="btn secondary" data-action="dismiss-unlock">Not now</button></div>
-    </div></div>` : '');
+    const right = breathingCards();
     return `<div class="two-col"><div>${left}</div><div class="sticky" id="right-rail">${right}</div></div>`;
   };
 
-  function renderRightRailOnly(){ const rail=document.getElementById('right-rail'); if (rail) rail.innerHTML = breathingCards() + (state.pendingPlantUnlock ? `<div class="card" style="margin-top:8px"><div class="content"><div style="font-weight:600">🌿 7-day streak! Add another plant?</div><div class="row" style="margin-top:8px"><button class="btn primary" data-action="add-plant">Add plant</button><button class="btn secondary" data-action="dismiss-unlock">Not now</button></div></div></div>`:''); }
+  function renderRightRailOnly(){ const rail=document.getElementById('right-rail'); if (rail) rail.innerHTML = breathingCards(); }
 
   function render(){
     const app = document.getElementById('app');
