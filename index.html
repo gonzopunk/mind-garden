@@ -82,9 +82,13 @@
 <body>
 <div class="container" id="app"></div>
 
+<!-- SunCalc for sunrise/sunset + moon calculations -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+
 <script>
 (function(){
   const SUNRISE_H = 7, SUNSET_H = 19, MAX_PLANTS = 4;
+  const FALLBACK_LOC = { lat:41.8781, lon:-87.6298 }; // Chicago fallback
   const fmt2 = (n)=> String(n).padStart(2,'0');
   const toAmPm = (h,m)=>{ const period = h>=12 ? "p.m." : "a.m."; const hh = h%12===0? 12 : h%12; return hh+":"+fmt2(m)+" "+period; };
   // Use local time instead of UTC so daily resets align with the user's timezone
@@ -168,6 +172,8 @@
       if (!('postActionPauseEnabled' in s.config)) s.config.postActionPauseEnabled = true;
       if (!('postActionPauseSec' in s.config)) s.config.postActionPauseSec = 3;
       if (!s.gallery) s.gallery = [];
+      if (!s.location) s.location = { geoEnabled:false, coords:null, denied:false };
+      if (!('devTimeOverride' in s)) s.devTimeOverride = false;
       s.gallery = s.gallery.map((gp,i,arr)=> {
         let base = (TYPE_HEIGHT[gp.flowerStyle||'daisy']||0.42);
         let tier = (gp.heightTier!=null? gp.heightTier : Math.floor(Math.random()*HEIGHT_STEPS.length));
@@ -187,7 +193,8 @@
   function fresh(){
     return { config:{...DEFAULT_CONFIG}, day:{ date: todayKey(), actionsRemaining: DEFAULT_CONFIG.dailyActions, plants: [DEFAULT_PLANT()], playedToday:false },
       plantSlots:1, streak:0, lastPlayDate:null, gallery:[], sessionActive:false, cooldownUntil:0, breathPrepUntil:0, postPauseUntil:0, actionCount:0, lastFact:'',
-      arrangeMode:false, unlimitedActions:false, devMode:false, devSliderHour:13.0, pendingPlantUnlock:false, __ppActive:false };
+      arrangeMode:false, unlimitedActions:false, devMode:false, devSliderHour:13.0, devTimeOverride:false, pendingPlantUnlock:false, __ppActive:false,
+      location:{ geoEnabled:false, coords:null, denied:false } };
   }
   function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
@@ -522,6 +529,13 @@
         <label class="row" style="gap:6px"><input type="checkbox" data-action="toggle-postpause" ${state.config.postActionPauseEnabled?'checked':''}><span class="small">Post-action pause</span></label>
         <label class="row" style="gap:6px"><span class="small">Seconds</span><input class="input" type="number" style="width:90px" data-action="set-postpause-sec" value="${state.config.postActionPauseSec}"></label>
       </div>
+      <div class="row" style="gap:12px; margin-top:10px">
+        <label class="row" style="gap:6px"><input type="checkbox" data-action="toggle-location" ${state.location.geoEnabled?'checked':''}><span class="small">Use my location for sunrise/sunset (beta)</span></label>
+      </div>
+      ${state.location.geoEnabled ? `
+        <div class="row" style="gap:8px; margin-top:8px"><span class="small">Change location:</span><button class="btn secondary" data-action="request-location">Re-request location</button><button class="btn secondary" data-action="use-fallback">Use fallback city</button></div>
+        ${state.location.denied ? '<div class="small-note" style="margin-top:4px">Using fallback city (Chicago).</div>' : ''}
+      ` : ''}
       <div class="row" style="margin-top:12px">
         <button class="btn" data-action="soft-reset" style="border-color:#2563eb; color:#1d4ed8">Soft reset (today only)</button>
         <button class="btn" data-action="reset-game" style="border-color:#ef4444; color:#b91c1c">Reset game (erase progress)</button>
@@ -544,8 +558,9 @@
           <label><div class="small">Unlimited actions</div><div class="row"><input type="checkbox" data-action="toggle-unlimited" ${state.unlimitedActions?'checked':''}><span class="small">Enable</span></div></label>
         </div>
         <div class="grid" style="grid-template-columns:1fr; gap:12px; margin-top:8px">
+          <label class="row" style="gap:6px"><input type="checkbox" data-action="toggle-dev-override" ${state.devTimeOverride?'checked':''}><span class="small">Override location/astronomy with dev time</span></label>
           <label><div class="small">Time of day (simulated)</div>
-            <input type="range" min="0" max="24" step="0.05" value="${state.devSliderHour}" data-action="set-dev-hour" style="width:100%">
+            <input type="range" min="0" max="24" step="0.05" value="${state.devSliderHour}" data-action="set-dev-hour" style="width:100%" ${state.devTimeOverride?'':'disabled'}>
             <div class="small">Current: ${formatHour(state.devSliderHour)}</div>
           </label>
         </div>
@@ -665,6 +680,13 @@
     const pps = app.querySelector('[data-action="set-postpause-sec"]');
     if (pps) pps.addEventListener('input', ()=>{ state.config.postActionPauseSec = Math.max(0, +pps.value||0); save(); });
 
+    const locToggle = app.querySelector('[data-action="toggle-location"]');
+    if (locToggle) locToggle.addEventListener('change', ()=>{ state.location.geoEnabled = locToggle.checked; if (locToggle.checked){ state.location.denied=false; initLocationAstronomy(); } save(); render(); });
+    const reqLoc = app.querySelector('[data-action="request-location"]');
+    if (reqLoc) reqLoc.addEventListener('click', ()=>{ state.location.denied=false; state.location.coords=null; save(); initLocationAstronomy(); render(); });
+    const fbLoc = app.querySelector('[data-action="use-fallback"]');
+    if (fbLoc) fbLoc.addEventListener('click', ()=>{ state.location.coords=null; state.location.denied=true; save(); render(); });
+
     const dm = app.querySelector('[data-action="toggle-dev-mode"]');
     if (dm) dm.addEventListener('change', ()=>{ state.devMode = dm.checked; save(); render(); });
 
@@ -679,6 +701,8 @@
 
     const dh = app.querySelector('[data-action="set-dev-hour"]');
     if (dh) dh.addEventListener('input', ()=>{ state.devSliderHour = +dh.value; save(); positionAstronomy(); });
+    const dov = app.querySelector('[data-action="toggle-dev-override"]');
+    if (dov) dov.addEventListener('change', ()=>{ state.devTimeOverride = dov.checked; save(); render(); });
 
     // DRAG along sill (X only) in arrange mode — pixel-based left positioning
     const win = app.querySelector('#window-el');
@@ -728,41 +752,139 @@
   }
 
   function getCssNumber(varName){ const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); return parseFloat(v.replace('px','')); }
-  function nowHour(){ if (state.devMode) return state.devSliderHour; const now = new Date(); return now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600; }
+  // Current time, respecting dev override if enabled
+  function currentTime(){
+    if (state.devMode && state.devTimeOverride){
+      const now = new Date();
+      const h = Math.floor(state.devSliderHour);
+      const m = Math.floor((state.devSliderHour - h)*60);
+      const s = Math.floor(((state.devSliderHour - h)*60 - m)*60);
+      now.setHours(h,m,s,0);
+      return now;
+    }
+    return new Date();
+  }
+
+  // Try to obtain geolocation and store in state
+  function initLocationAstronomy(){
+    if (!state.location?.geoEnabled) return;
+    if (state.location.coords || state.location.denied) return;
+    if (navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(pos=>{
+        state.location.coords = {lat: pos.coords.latitude, lon: pos.coords.longitude};
+        state.location.denied=false;
+        save(); positionAstronomy(); render();
+      }, err=>{
+        state.location.coords=null; state.location.denied=true;
+        save(); positionAstronomy(); render();
+      }, {timeout:10000});
+    } else {
+      state.location.denied=true;
+    }
+  }
+
+  // Compute sun/moon positioning using SunCalc
+  function computeSunMoon(now, lat, lon){
+    const times = SunCalc.getTimes(now, lat, lon);
+    const sunrise=times.sunrise.getTime(), sunset=times.sunset.getTime();
+    const dawn=times.dawn.getTime(), dusk=times.dusk.getTime();
+    const nowMs = now.getTime();
+    const prev = SunCalc.getTimes(new Date(nowMs - 86400000), lat, lon);
+    const next = SunCalc.getTimes(new Date(nowMs + 86400000), lat, lon);
+    const dayT = clamp((nowMs - sunrise)/(sunset - sunrise),0,1);
+    let nightT;
+    if (nowMs >= sunset) nightT = (nowMs - sunset)/(next.sunrise.getTime() - sunset);
+    else if (nowMs < sunrise) nightT = (nowMs - prev.sunset.getTime())/(sunrise - prev.sunset.getTime());
+    else nightT = 0;
+    nightT = clamp(nightT,0,1);
+    let darkness=0;
+    if (nowMs < dawn || nowMs >= dusk) darkness=1;
+    else if (nowMs >= dawn && nowMs < sunrise) darkness = 1 - (nowMs - dawn)/(sunrise - dawn);
+    else if (nowMs >= sunset && nowMs < dusk) darkness = (nowMs - sunset)/(dusk - sunset);
+    const duskF = (nowMs >= sunset && nowMs < dusk) ? (nowMs - sunset)/(dusk - sunset) : 0;
+    const dawnF = (nowMs >= dawn && nowMs < sunrise) ? (sunrise - nowMs)/(sunrise - dawn) : 0;
+    const moonPos = SunCalc.getMoonPosition(now, lat, lon);
+    const moonIllum = SunCalc.getMoonIllumination(now);
+    return {dayT, nightT, darkness, dusk:duskF, dawn:dawnF, moonPos, moonIllum};
+  }
+
+  function nowHour(){
+    if (state.devMode && state.devTimeOverride) return state.devSliderHour;
+    const now = new Date();
+    return now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
+  }
+
   function positionAstronomy(){
     const winH = getCssNumber('--win-h'), groundH=getCssNumber('--ground-h');
     const grassTopPct = ((winH - groundH)/winH)*100;
     const sun=document.getElementById('sun'), moon=document.getElementById('moon'), sky=document.getElementById('sky-bg');
     const clouds1=document.getElementById('clouds1'), clouds2=document.getElementById('clouds2'), stars=document.querySelector('.stars');
-    const hour = nowHour();
-    const dayT = Math.max(0, Math.min(1, (hour - SUNRISE_H)/(SUNSET_H - SUNRISE_H) ));
-    const xSun = 1.5 + 97*dayT, amp=28, ySun = grassTopPct - amp*Math.sin(Math.PI*dayT);
-    let nightT; if (hour>=SUNSET_H) nightT = (hour - SUNSET_H)/(24 - SUNSET_H + SUNRISE_H); else if (hour<SUNRISE_H) nightT = (hour + (24 - SUNSET_H))/(24 - SUNSET_H + SUNRISE_H); else nightT=0; nightT=Math.max(0, Math.min(1, nightT));
-    const xMoon = 98.5 - 97*nightT, yMoon = grassTopPct - amp*Math.sin(Math.PI*nightT);
-    if (sun){ sun.style.left = xSun+'%'; sun.style.top = ySun+'%'; }
-    if (moon){ moon.style.left = xMoon+'%'; moon.style.top = yMoon+'%'; }
-    function twilightFactor(centerHour){ const diff=Math.abs(hour-centerHour); if (diff>0.5) return 0; return 0.5*(1+Math.cos(Math.PI*(diff/0.5))); }
-    const dusk=twilightFactor(SUNSET_H), dawn=twilightFactor(SUNRISE_H);
-    let darkBase = (hour < SUNRISE_H || hour >= SUNSET_H) ? 1 : 0;
-    const darkness = Math.max(0, Math.min(1, darkBase + dusk*(1-darkBase) - dawn*darkBase ));
-    if (sky){
-      const dayTop = getComputedStyle(document.documentElement).getPropertyValue('--sky1').trim();
-      const dayBot = getComputedStyle(document.documentElement).getPropertyValue('--sky2').trim();
-      const nightTop='#071a3a', nightBot='#0b2447';
-      function mix(c1,c2,t){ function hexToRgb(h){h=h.replace('#',''); return {r:parseInt(h.slice(0,2),16), g:parseInt(h.slice(2,4),16), b:parseInt(h.slice(4,6),16)};}
-        function rgbToHex(r,g,b){const H=(n)=>n.toString(16).padStart(2,'0'); return '#'+H(r)+H(g)+H(b);}
-        const a=hexToRgb(c1), b=hexToRgb(c2);
-        return rgbToHex(Math.round(a.r+(b.r-a.r)*t), Math.round(a.g+(b.g-a.g)*t), Math.round(a.b+(b.b-a.b)*t));
+    const amp=28;
+    if (!state.location.geoEnabled){
+      const hour = nowHour();
+      const dayT = Math.max(0, Math.min(1, (hour - SUNRISE_H)/(SUNSET_H - SUNRISE_H) ));
+      const xSun = 1.5 + 97*dayT, ySun = grassTopPct - amp*Math.sin(Math.PI*dayT);
+      let nightT; if (hour>=SUNSET_H) nightT = (hour - SUNSET_H)/(24 - SUNSET_H + SUNRISE_H); else if (hour<SUNRISE_H) nightT = (hour + (24 - SUNSET_H))/(24 - SUNSET_H + SUNRISE_H); else nightT=0; nightT=Math.max(0, Math.min(1, nightT));
+      const xMoon = 98.5 - 97*nightT, yMoon = grassTopPct - amp*Math.sin(Math.PI*nightT);
+      if (sun){ sun.style.left = xSun+'%'; sun.style.top = ySun+'%'; }
+      if (moon){ moon.style.left = xMoon+'%'; moon.style.top = yMoon+'%'; }
+      function twilightFactor(centerHour){ const diff=Math.abs(hour-centerHour); if (diff>0.5) return 0; return 0.5*(1+Math.cos(Math.PI*(diff/0.5))); }
+      const dusk=twilightFactor(SUNSET_H), dawn=twilightFactor(SUNRISE_H);
+      let darkBase = (hour < SUNRISE_H || hour >= SUNSET_H) ? 1 : 0;
+      const darkness = Math.max(0, Math.min(1, darkBase + dusk*(1-darkBase) - dawn*darkBase ));
+      if (sky){
+        const dayTop = getComputedStyle(document.documentElement).getPropertyValue('--sky1').trim();
+        const dayBot = getComputedStyle(document.documentElement).getPropertyValue('--sky2').trim();
+        const nightTop='#071a3a', nightBot='#0b2447';
+        function mix(c1,c2,t){ function hexToRgb(h){h=h.replace('#',''); return {r:parseInt(h.slice(0,2),16), g:parseInt(h.slice(2,4),16), b:parseInt(h.slice(4,6),16)};}
+          function rgbToHex(r,g,b){const H=(n)=>n.toString(16).padStart(2,'0'); return '#'+H(r)+H(g)+H(b);}
+          const a=hexToRgb(c1), b=hexToRgb(c2);
+          return rgbToHex(Math.round(a.r+(b.r-a.r)*t), Math.round(a.g+(b.g-a.g)*t), Math.round(a.b+(b.b-a.b)*t));
+        }
+        const top=mix(dayTop, nightTop, darkness), bot=mix(dayBot, nightBot, darkness);
+        sky.style.background = `linear-gradient(${top}, ${bot})`;
       }
-      const top=mix(dayTop, nightTop, darkness), bot=mix(dayBot, nightBot, darkness);
-      sky.style.background = `linear-gradient(${top}, ${bot})`;
+      const cloudOpacity = 0.9*(1-darkness);
+      if (clouds1) clouds1.style.opacity = cloudOpacity;
+      if (clouds2) clouds2.style.opacity = cloudOpacity;
+      if (stars) stars.style.opacity = darkness;
+      if (sun)  sun.style.opacity  = (dayT>0 && dayT<1) ? (0.9 * (1 - dusk)) : 0;
+      if (moon) moon.style.opacity = (nightT>0 && nightT<1) ? (0.8 * (1 - dawn)) : 0;
+    } else {
+      const loc = state.location.coords || FALLBACK_LOC;
+      const now = currentTime();
+      const astro = computeSunMoon(now, loc.lat, loc.lon);
+      const xSun = 1.5 + 97*astro.dayT, ySun = grassTopPct - amp*Math.sin(Math.PI*astro.dayT);
+      const xMoon = 98.5 - 97*astro.nightT;
+      const moonAlt = Math.max(0, Math.sin(astro.moonPos.altitude));
+      const yMoon = grassTopPct - amp*moonAlt;
+      if (sun){ sun.style.left = xSun+'%'; sun.style.top = ySun+'%'; }
+      if (moon){ moon.style.left = xMoon+'%'; moon.style.top = yMoon+'%'; }
+      if (sky){
+        const dayTop = getComputedStyle(document.documentElement).getPropertyValue('--sky1').trim();
+        const dayBot = getComputedStyle(document.documentElement).getPropertyValue('--sky2').trim();
+        const nightTop='#071a3a', nightBot='#0b2447';
+        function mix(c1,c2,t){ function hexToRgb(h){h=h.replace('#',''); return {r:parseInt(h.slice(0,2),16), g:parseInt(h.slice(2,4),16), b:parseInt(h.slice(4,6),16)};}
+          function rgbToHex(r,g,b){const H=(n)=>n.toString(16).padStart(2,'0'); return '#'+H(r)+H(g)+H(b);}
+          const a=hexToRgb(c1), b=hexToRgb(c2);
+          return rgbToHex(Math.round(a.r+(b.r-a.r)*t), Math.round(a.g+(b.g-a.g)*t), Math.round(a.b+(b.b-a.b)*t));
+        }
+        const top=mix(dayTop, nightTop, astro.darkness), bot=mix(dayBot, nightBot, astro.darkness);
+        sky.style.background = `linear-gradient(${top}, ${bot})`;
+      }
+      const cloudOpacity = 0.9*(1-astro.darkness);
+      if (clouds1) clouds1.style.opacity = cloudOpacity;
+      if (clouds2) clouds2.style.opacity = cloudOpacity;
+      if (stars) stars.style.opacity = astro.darkness;
+      if (sun)  sun.style.opacity  = (astro.dayT>0 && astro.dayT<1) ? (0.9 * (1 - astro.dusk)) : 0;
+      if (moon){
+        let mop = (astro.nightT>0 && astro.nightT<1) ? (0.8 * (1 - astro.dawn)) : 0;
+        mop *= (0.6 + 0.4*astro.moonIllum.fraction);
+        moon.style.opacity = mop;
+        const scale = 0.75 + 0.25*astro.moonIllum.fraction;
+        moon.style.transform = `translate(-50%, -50%) scale(${scale})`;
+      }
     }
-    const cloudOpacity = 0.9*(1-darkness);
-    if (clouds1) clouds1.style.opacity = cloudOpacity;
-    if (clouds2) clouds2.style.opacity = cloudOpacity;
-    if (stars) stars.style.opacity = darkness;
-    if (sun)  sun.style.opacity  = (dayT>0 && dayT<1) ? (0.9 * (1 - dusk)) : 0;
-    if (moon) moon.style.opacity = (nightT>0 && nightT<1) ? (0.8 * (1 - dawn)) : 0;
   }
 
   function gardenAndRail(){ return gardenAndRail._html(); }
@@ -804,6 +926,7 @@
     }
   }, 300);
 
+  initLocationAstronomy();
   render();
 })();</script>
 </body>
