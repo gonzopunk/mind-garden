@@ -501,8 +501,13 @@
 
   function unlockNotice(){
     if (!isLocked()) return '';
-    const ms = nextUnlock().getTime() - Date.now(); const s = Math.max(0, Math.floor(ms/1000)); const m = Math.floor(s/60), r = s%60;
-    return `<div class="card"><div class="content small-note">Content unlocks daily at ${state.config.unlockTimeText}. Next unlock in ${fmt2(m)}:${fmt2(r)}.</div></div>`;
+    const ms = nextUnlock().getTime() - Date.now();
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const r = s % 60;
+    const t = h > 0 ? `${h}:${fmt2(m)}:${fmt2(r)}` : `${fmt2(m)}:${fmt2(r)}`;
+    return `<div class="card"><div class="content small-note">Content unlocks daily at ${state.config.unlockTimeText}. Next unlock in ${t}.</div></div>`;
   }
 
   function generalSettings(){
