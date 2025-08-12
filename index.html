@@ -87,7 +87,11 @@
   const SUNRISE_H = 7, SUNSET_H = 19, MAX_PLANTS = 4;
   const fmt2 = (n)=> String(n).padStart(2,'0');
   const toAmPm = (h,m)=>{ const period = h>=12 ? "p.m." : "a.m."; const hh = h%12===0? 12 : h%12; return hh+":"+fmt2(m)+" "+period; };
-  const todayKey = ()=> new Date().toISOString().slice(0,10);
+  // Use local time instead of UTC so daily resets align with the user's timezone
+  const todayKey = ()=>{
+    const d = new Date();
+    return `${d.getFullYear()}-${fmt2(d.getMonth()+1)}-${fmt2(d.getDate())}`;
+  };
   const clamp = (v,lo,hi)=> Math.min(hi, Math.max(lo,v));
 
   const DEFAULT_CONFIG = {
