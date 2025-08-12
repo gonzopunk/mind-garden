@@ -32,11 +32,12 @@
   .status-grid{display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:16px}
   .status-item .label{font-size:12px; color:var(--muted)}
   .status-item .value{font-weight:600}
-  .two-col{display:grid; grid-template-columns:1fr 320px; gap:16px}
-  @media(max-width:860px){ .two-col{grid-template-columns:1fr} .sticky{position:static} }
-  .sticky{position:sticky; top:12px}
   .plants-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px}
   @media(max-width:700px){ .plants-grid{grid-template-columns:1fr} }
+  #breathing-panel{position:sticky; top:8px; z-index:10; margin-bottom:12px;}
+  .breath-card{border:1px solid rgba(16,185,129,.3); background:rgba(16,185,129,.08); border-radius:14px; padding:10px 12px;}
+  .breath-title{font-weight:600; font-size:0.95rem;}
+  .breath-sub{opacity:.75; font-size:.85rem;}
   .progress{position:relative; height:8px; background:#eef2ff; border-radius:999px; overflow:hidden}
   .progress .bar{height:100%; background:#34d399}
   /* window environment */
@@ -239,8 +240,10 @@
     if (!should) return;
     const prep = 3000; const phasesMs = state.config.breathPhases.reduce((a,b)=>a+b,0)*1000; const now = Date.now();
     state.breathPrepUntil = now + prep; state.cooldownUntil = 0;
-    setTimeout(()=>{ state.breathPrepUntil=0; state.cooldownUntil=Date.now()+phasesMs; save(); renderRightRailOnly(); }, prep);
-    save(); renderRightRailOnly();
+    setTimeout(()=>{ state.breathPrepUntil=0; state.cooldownUntil=Date.now()+phasesMs; save(); renderBreathingPanel(); }, prep);
+    save(); renderBreathingPanel();
+    const panel=document.getElementById('breathing-panel');
+    if(panel) panel.scrollIntoView({behavior:'smooth', block:'start'});
   }
   function afterAnyAction(){
     markPlayed();
@@ -481,9 +484,10 @@
     let out='';
     if (showPrep){
       const secLeft = Math.max(0, Math.ceil((state.breathPrepUntil - now)/1000));
-      out += `<div class="card"><div class="content" style="text-align:center">
-        <div style="font-weight:600">Get ready to breathe</div>
-        <div class="small-note">Starting in ${secLeft}…</div></div></div>`;
+      out += `<div class="breath-card">
+        <div class="breath-title">Get ready to breathe</div>
+        <div class="breath-sub">Starting in ${secLeft}…</div>
+      </div>`;
     }
     if (showBreath){
       const phases = state.config.breathPhases; const total = phases.reduce((a,b)=>a+b,0);
@@ -495,15 +499,14 @@
       const minSize=24, maxSize=56; const prog = Math.max(0, Math.min(1, (elapsed - phaseStart)/phaseLen ));
       let size = (idx===0)? (minSize + (maxSize-minSize)*prog) : (idx===1? maxSize : (minSize + (maxSize-minSize)*(1-prog)));
       const counts = Array.from({length:secLeft},(_,i)=> secLeft-i-1).filter(x=>x>=0).map(x=>` ${x}…`).join('');
-      out += `<div class="card"><div class="content" style="text-align:center">
-        <div style="font-weight:600">Mindful pause</div>
+      out += `<div class="breath-card" style="text-align:center">
+        <div class="breath-title">Mindful pause</div>
         <div style="width:160px;height:160px;border:2px solid #94a3b8;margin:8px auto;border-radius:12px;display:flex;align-items:center;justify-content:center">
           <div style="width:${size}px;height:${size}px;border-radius:999px;background:rgba(16,185,129,.25);transition:width .2s,height .2s"></div>
         </div>
-        <div>${names[idx]} ${secLeft} sec<span class="small-note">${counts}</span></div>
-      </div></div>`;
+        <div class="breath-sub">${names[idx]} ${secLeft} sec<span>${counts}</span></div>
+      </div>`;
     }
-    if (state.lastFact){ out += `<div class="sign"><div class="title">Garden note</div><p>💡 ${state.lastFact}</p></div>`; }
     return out;
   }
 
@@ -683,14 +686,14 @@
     if (tb) tb.addEventListener('input', ()=>{ state.config.turnsBetweenBreaths = Math.max(1, +tb.value||1); save(); });
 
     const br = app.querySelector('[data-action="toggle-breath"]');
-    if (br) br.addEventListener('change', ()=>{ state.config.breathingEnabled = br.checked; save(); renderRightRailOnly(); });
+    if (br) br.addEventListener('change', ()=>{ state.config.breathingEnabled = br.checked; save(); renderBreathingPanel(); });
 
     const inh = app.querySelector('[data-action="set-inhale"]');
-    if (inh) inh.addEventListener('input', ()=>{ state.config.breathPhases[0] = Math.max(1, +inh.value||1); save(); renderRightRailOnly(); });
+    if (inh) inh.addEventListener('input', ()=>{ state.config.breathPhases[0] = Math.max(1, +inh.value||1); save(); renderBreathingPanel(); });
     const hld = app.querySelector('[data-action="set-hold"]');
-    if (hld) hld.addEventListener('input', ()=>{ state.config.breathPhases[1] = Math.max(0, +hld.value||0); save(); renderRightRailOnly(); });
+    if (hld) hld.addEventListener('input', ()=>{ state.config.breathPhases[1] = Math.max(0, +hld.value||0); save(); renderBreathingPanel(); });
     const exh = app.querySelector('[data-action="set-exhale"]');
-    if (exh) exh.addEventListener('input', ()=>{ state.config.breathPhases[2] = Math.max(1, +exh.value||1); save(); renderRightRailOnly(); });
+    if (exh) exh.addEventListener('input', ()=>{ state.config.breathPhases[2] = Math.max(1, +exh.value||1); save(); renderBreathingPanel(); });
 
     const pp = app.querySelector('[data-action="toggle-postpause"]');
     if (pp) pp.addEventListener('change', ()=>{ state.config.postActionPauseEnabled = pp.checked; if (!pp.checked){ state.postPauseUntil=0; state.__ppActive=false; } save(); });
@@ -908,17 +911,22 @@
   function gardenAndRail(){ return gardenAndRail._html(); }
   gardenAndRail._html = function(){
     if (state.day.plants.length > 1) state.day.plants = state.day.plants.slice(0,1); // single-plant mode
-    const left = `<div class="plants-grid">${state.day.plants.map(plantCard).join('')}</div>`;
-    const right = breathingCards();
-    return `<div class="two-col"><div>${left}</div><div class="sticky" id="right-rail">${right}</div></div>`;
+    const plants = `<div class="plants-grid">${state.day.plants.map(plantCard).join('')}</div>`;
+    return `<section id="breathing-panel" aria-live="polite" style="display:none;"></section>${plants}`;
   };
 
-  function renderRightRailOnly(){ const rail=document.getElementById('right-rail'); if (rail) rail.innerHTML = breathingCards(); }
+  function renderBreathingPanel(){
+    const panel=document.getElementById('breathing-panel');
+    if(!panel) return;
+    const html=breathingCards();
+    panel.innerHTML=html;
+    panel.style.display = html ? 'block' : 'none';
+  }
 
   function render(){
     const app = document.getElementById('app');
     app.innerHTML = `<h1>Mind Garden <span class="tag">Prototype</span></h1>${statusBar()}${unlockNotice()}${gardenAndRail()}${windowsill()}${settingsPanel()}${footerNote()}`;
-    bind(); positionAstronomy();
+    bind(); positionAstronomy(); renderBreathingPanel();
   }
 
   // Tick
@@ -933,7 +941,7 @@
         state.__ppActive = false;
         render();
       } else {
-        renderRightRailOnly();
+        renderBreathingPanel();
       }
     }
   }, 300);
