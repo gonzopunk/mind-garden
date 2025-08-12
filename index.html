@@ -221,8 +221,8 @@
     markPlayed();
     state.actionCount += 1;
     state.lastFact = DOPAMINE_FACTS[Math.floor(Math.random()*DOPAMINE_FACTS.length)];
-    const willBreath = state.config.breathingEnabled && ((state.actionCount) % state.config.turnsBetweenBreaths === 0);
-    if (!willBreath && state.config.postActionPauseEnabled){
+    const willBreathe = state.config.breathingEnabled && ((state.actionCount) % state.config.turnsBetweenBreaths === 0);
+    if (!willBreathe && state.config.postActionPauseEnabled){
       const pauseMs = Math.max(0, (state.config.postActionPauseSec||0) * 1000);
       state.postPauseUntil = Date.now() + pauseMs;
       state.__ppActive = true;
