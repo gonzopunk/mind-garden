@@ -31,11 +31,8 @@
   .input, select{width:100%; padding:10px 12px; border-radius:12px; border:1px solid #d1d5db; background:#fff}
   .status-grid{display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:16px}
   .status-item .label{font-size:12px; color:var(--muted)}
-  .status-item .value{font-weight:600}
-  .two-col{display:grid; grid-template-columns:1fr 320px; gap:16px}
-  @media(max-width:860px){ .two-col{grid-template-columns:1fr} .sticky{position:static} }
-  .sticky{position:sticky; top:12px}
-  .plants-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px}
+    .status-item .value{font-weight:600}
+    .plants-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px}
   @media(max-width:700px){ .plants-grid{grid-template-columns:1fr} }
   .progress{position:relative; height:8px; background:#eef2ff; border-radius:999px; overflow:hidden}
   .progress .bar{height:100%; background:#34d399}
@@ -239,8 +236,8 @@
     if (!should) return;
     const prep = 3000; const phasesMs = state.config.breathPhases.reduce((a,b)=>a+b,0)*1000; const now = Date.now();
     state.breathPrepUntil = now + prep; state.cooldownUntil = 0;
-    setTimeout(()=>{ state.breathPrepUntil=0; state.cooldownUntil=Date.now()+phasesMs; save(); renderRightRailOnly(); }, prep);
-    save(); renderRightRailOnly();
+    setTimeout(()=>{ state.breathPrepUntil=0; state.cooldownUntil=Date.now()+phasesMs; save(); renderBreathingOnly(); }, prep);
+    save(); renderBreathingOnly();
   }
   function afterAnyAction(){
     markPlayed();
@@ -683,14 +680,14 @@
     if (tb) tb.addEventListener('input', ()=>{ state.config.turnsBetweenBreaths = Math.max(1, +tb.value||1); save(); });
 
     const br = app.querySelector('[data-action="toggle-breath"]');
-    if (br) br.addEventListener('change', ()=>{ state.config.breathingEnabled = br.checked; save(); renderRightRailOnly(); });
+    if (br) br.addEventListener('change', ()=>{ state.config.breathingEnabled = br.checked; save(); renderBreathingOnly(); });
 
     const inh = app.querySelector('[data-action="set-inhale"]');
-    if (inh) inh.addEventListener('input', ()=>{ state.config.breathPhases[0] = Math.max(1, +inh.value||1); save(); renderRightRailOnly(); });
+    if (inh) inh.addEventListener('input', ()=>{ state.config.breathPhases[0] = Math.max(1, +inh.value||1); save(); renderBreathingOnly(); });
     const hld = app.querySelector('[data-action="set-hold"]');
-    if (hld) hld.addEventListener('input', ()=>{ state.config.breathPhases[1] = Math.max(0, +hld.value||0); save(); renderRightRailOnly(); });
+    if (hld) hld.addEventListener('input', ()=>{ state.config.breathPhases[1] = Math.max(0, +hld.value||0); save(); renderBreathingOnly(); });
     const exh = app.querySelector('[data-action="set-exhale"]');
-    if (exh) exh.addEventListener('input', ()=>{ state.config.breathPhases[2] = Math.max(1, +exh.value||1); save(); renderRightRailOnly(); });
+    if (exh) exh.addEventListener('input', ()=>{ state.config.breathPhases[2] = Math.max(1, +exh.value||1); save(); renderBreathingOnly(); });
 
     const pp = app.querySelector('[data-action="toggle-postpause"]');
     if (pp) pp.addEventListener('change', ()=>{ state.config.postActionPauseEnabled = pp.checked; if (!pp.checked){ state.postPauseUntil=0; state.__ppActive=false; } save(); });
@@ -905,19 +902,17 @@
     }
   }
 
-  function gardenAndRail(){ return gardenAndRail._html(); }
-  gardenAndRail._html = function(){
+  function garden(){ return garden._html(); }
+  garden._html = function(){
     if (state.day.plants.length > 1) state.day.plants = state.day.plants.slice(0,1); // single-plant mode
-    const left = `<div class="plants-grid">${state.day.plants.map(plantCard).join('')}</div>`;
-    const right = breathingCards();
-    return `<div class="two-col"><div>${left}</div><div class="sticky" id="right-rail">${right}</div></div>`;
+    return `<div class="plants-grid">${state.day.plants.map(plantCard).join('')}</div>`;
   };
 
-  function renderRightRailOnly(){ const rail=document.getElementById('right-rail'); if (rail) rail.innerHTML = breathingCards(); }
+  function renderBreathingOnly(){ const panel=document.getElementById('breathing-panel'); if (panel) panel.innerHTML = breathingCards(); }
 
   function render(){
     const app = document.getElementById('app');
-    app.innerHTML = `<h1>Mind Garden <span class="tag">Prototype</span></h1>${statusBar()}${unlockNotice()}${gardenAndRail()}${windowsill()}${settingsPanel()}${footerNote()}`;
+    app.innerHTML = `<h1>Mind Garden <span class="tag">Prototype</span></h1>${statusBar()}${unlockNotice()}<div id="breathing-panel">${breathingCards()}</div>${garden()}${windowsill()}${settingsPanel()}${footerNote()}`;
     bind(); positionAstronomy();
   }
 
@@ -933,7 +928,7 @@
         state.__ppActive = false;
         render();
       } else {
-        renderRightRailOnly();
+        renderBreathingOnly();
       }
     }
   }, 300);
