@@ -193,7 +193,10 @@
       if (!('actionsToMature' in s.config)) s.config.actionsToMature = 30;
       if (!('postActionPauseEnabled' in s.config)) s.config.postActionPauseEnabled = true;
       if (!('postActionPauseSec' in s.config)) s.config.postActionPauseSec = 3;
-      if (!s.location) s.location = { geoEnabled:false, coords:null, denied:false };
+      if (!s.location) s.location = { geoEnabled:false, coords:null, manualCoords:null, denied:false };
+      else {
+        if (!('manualCoords' in s.location)) s.location.manualCoords = null;
+      }
       if (!('devTimeOverride' in s)) s.devTimeOverride = false;
       s.sessionActive=false; s.cooldownUntil=0; s.breathPrepUntil=0; s.postPauseUntil=0; s.actionCount=0; s.lastFact=''; s.arrangeMode=false;
       s.unlimitedActions=false; s.devMode=false; s.devSliderHour=13.0;
@@ -208,7 +211,7 @@
     return { config:{...DEFAULT_CONFIG}, day:{ date: todayKey(), actionsRemaining: DEFAULT_CONFIG.dailyActions, plants: [DEFAULT_PLANT()], playedToday:false },
       streak:0, lastPlayDate:null, gallery:[], sessionActive:false, cooldownUntil:0, breathPrepUntil:0, postPauseUntil:0, actionCount:0, lastFact:'',
       arrangeMode:false, unlimitedActions:false, devMode:false, devSliderHour:13.0, devTimeOverride:false, __ppActive:false,
-      location:{ geoEnabled:false, coords:null, denied:false } };
+      location:{ geoEnabled:false, coords:null, manualCoords:null, denied:false } };
   }
   function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
@@ -554,6 +557,10 @@
         <div class="row" style="gap:8px; margin-top:8px"><span class="small">Change location:</span><button class="btn secondary" data-action="request-location">Re-request location</button><button class="btn secondary" data-action="use-fallback">Use fallback city</button></div>
         ${state.location.denied ? '<div class="small-note" style="margin-top:4px">Using fallback city (Chicago).</div>' : ''}
       ` : ''}
+      <div class="row" style="gap:8px; margin-top:8px">
+        <label class="row" style="gap:6px"><span class="small">Lat</span><input class="input" type="number" step="any" style="width:100px" data-action="set-lat" value="${state.location.manualCoords?.lat ?? ''}"></label>
+        <label class="row" style="gap:6px"><span class="small">Lon</span><input class="input" type="number" step="any" style="width:100px" data-action="set-lon" value="${state.location.manualCoords?.lon ?? ''}"></label>
+      </div>
       <div class="row" style="margin-top:12px">
         <button class="btn" data-action="soft-reset" style="border-color:#2563eb; color:#1d4ed8">Soft reset (today only)</button>
         <button class="btn" data-action="reset-game" style="border-color:#ef4444; color:#b91c1c">Reset game (erase progress)</button>
@@ -702,6 +709,26 @@
     const fbLoc = app.querySelector('[data-action="use-fallback"]');
     if (fbLoc) fbLoc.addEventListener('click', ()=>{ state.location.coords=null; state.location.denied=true; save(); render(); });
 
+    const latInput = app.querySelector('[data-action="set-lat"]');
+    const lonInput = app.querySelector('[data-action="set-lon"]');
+    function updateManualCoords(){
+      const lat = parseFloat(latInput?.value);
+      const lon = parseFloat(lonInput?.value);
+      if (!isNaN(lat) && !isNaN(lon)){
+        state.location.manualCoords = {lat, lon};
+        state.location.coords = {lat, lon};
+        state.location.denied=false;
+      } else {
+        state.location.manualCoords = null;
+        state.location.coords = null;
+      }
+      save();
+      initLocationAstronomy();
+      render();
+    }
+    if (latInput) latInput.addEventListener('change', updateManualCoords);
+    if (lonInput) lonInput.addEventListener('change', updateManualCoords);
+
     const dm = app.querySelector('[data-action="toggle-dev-mode"]');
     if (dm) dm.addEventListener('change', ()=>{ state.devMode = dm.checked; save(); render(); });
 
@@ -783,6 +810,12 @@
   // Try to obtain geolocation and store in state
   function initLocationAstronomy(){
     if (!state.location?.geoEnabled) return;
+    if (state.location.manualCoords){
+      state.location.coords = {...state.location.manualCoords};
+      state.location.denied=false;
+      save(); positionAstronomy(); render();
+      return;
+    }
     if (state.location.coords || state.location.denied) return;
     if (navigator.geolocation){
       navigator.geolocation.getCurrentPosition(pos=>{
@@ -866,7 +899,7 @@
       if (sun)  sun.style.opacity  = (dayT>0 && dayT<1) ? (0.9 * (1 - dusk)) : 0;
       if (moon) moon.style.opacity = (nightT>0 && nightT<1) ? (0.8 * (1 - dawn)) : 0;
     } else {
-      const loc = state.location.coords || FALLBACK_LOC;
+      const loc = state.location.manualCoords || state.location.coords || FALLBACK_LOC;
       const now = currentTime();
       const astro = computeSunMoon(now, loc.lat, loc.lon);
       const xSun = 1.5 + 97*astro.dayT, ySun = grassTopPct - amp*Math.sin(Math.PI*astro.dayT);
