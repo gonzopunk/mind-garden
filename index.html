@@ -98,7 +98,7 @@
   const DEFAULT_CONFIG = {
     dailyUnlockHour: 7, dailyUnlockMinute: 0,
     dailyActions: 30,
-    actionsToMature: 30,
+    actionsToMature: 20,
     breathingEnabled: true,
     turnsBetweenBreaths: 5,
     breathPhases: [4,7,8],
@@ -190,7 +190,7 @@
       }
       if (s.day.plants.length===0) s.day.plants=[DEFAULT_PLANT()];
       if (!s.config) s.config = {...DEFAULT_CONFIG};
-      if (!('actionsToMature' in s.config)) s.config.actionsToMature = 30;
+      if (!('actionsToMature' in s.config)) s.config.actionsToMature = 20;
       if (!('postActionPauseEnabled' in s.config)) s.config.postActionPauseEnabled = true;
       if (!('postActionPauseSec' in s.config)) s.config.postActionPauseSec = 3;
       if (!s.location) s.location = { geoEnabled:false, coords:null, denied:false };
