@@ -39,6 +39,10 @@
   /* windows toolbar */
   #windows-toolbar{display:flex; align-items:center; gap:8px; margin-bottom:8px}
   #windows-toolbar #window-label{flex:1; text-align:center; font-weight:600}
+  #window-label.pulse{animation:labelPulse .3s}
+  @keyframes labelPulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
+  .window-toast{position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.75); color:#fff; padding:8px 12px; border-radius:8px; font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:1000}
+  .window-toast.show{opacity:1}
   /* window environment */
   .window{position:relative; border-radius:16px; overflow:hidden; box-shadow: inset 0 2px 6px rgba(0,0,0,.06); height:var(--win-h)}
   .sky{position:absolute; inset:0; background:linear-gradient(var(--sky1), var(--sky2)); z-index:0; transition: background .5s linear}
@@ -81,6 +85,7 @@
 </head>
 <body>
 <div class="container" id="app"></div>
+<div id="window-toast" class="window-toast"></div>
 
 <!-- SunCalc for sunrise/sunset + moon calculations -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
