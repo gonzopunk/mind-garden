@@ -37,7 +37,7 @@
   .progress{position:relative; height:8px; background:#eef2ff; border-radius:999px; overflow:hidden}
   .progress .bar{height:100%; background:#34d399}
   /* windows toolbar */
-  #windows-toolbar{display:flex; align-items:center; gap:8px; margin-bottom:16px}
+  #windows-toolbar{display:flex; align-items:center; gap:8px; margin-bottom:8px}
   #windows-toolbar #window-label{flex:1; text-align:center; font-weight:600}
   /* window environment */
   .window{position:relative; border-radius:16px; overflow:hidden; box-shadow: inset 0 2px 6px rgba(0,0,0,.06); height:var(--win-h)}
@@ -457,6 +457,13 @@
         <div style="font-weight:600">Windowsill</div>
         <button class="btn secondary" data-action="toggle-arrange">${state.arrangeMode? 'Done':'Arrange plants'}</button>
       </div>
+      <div id="windows-toolbar">
+        <button id="window-prev" class="btn secondary">‹</button>
+        <div id="window-label">Window 1/1</div>
+        <button id="window-next" class="btn secondary">›</button>
+        <button id="window-add" class="btn secondary" disabled>+ Window</button>
+      </div>
+      <div id="windows-view"></div>
       <div class="window" id="window-el">
         <div class="sky" id="sky-bg"></div>
         <div id="sun" class="sun"></div>
@@ -915,7 +922,7 @@
 
   function render(){
     const app = document.getElementById('app');
-    app.innerHTML = `<h1>Mind Garden <span class="tag">Prototype</span></h1>${statusBar()}${unlockNotice()}<div id="breathing-panel">${breathingCards()}</div><div id="windows-toolbar"><button id="window-prev" class="btn secondary">‹</button><div id="window-label">Window 1/1</div><button id="window-next" class="btn secondary">›</button><button id="window-add" class="btn secondary" disabled>+ Window</button></div><div id="windows-view"></div>${garden()}${windowsill()}${settingsPanel()}${footerNote()}`;
+    app.innerHTML = `<h1>Mind Garden <span class="tag">Prototype</span></h1>${statusBar()}${unlockNotice()}<div id="breathing-panel">${breathingCards()}</div>${garden()}${windowsill()}${settingsPanel()}${footerNote()}`;
     bind(); positionAstronomy();
   }
 
