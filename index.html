@@ -461,9 +461,9 @@
       </div>
       <div id="windows-toolbar">
         <button id="window-prev" aria-label="Previous Window">‹</button>
-        <span id="window-label">Window 1/3</span>
+        <span id="window-label">Window 1/1</span>
         <button id="window-next" aria-label="Next Window">›</button>
-        <button id="window-add" aria-label="Add Window" disabled>+ Window</button>
+        <button id="window-add" aria-label="Add Window">+ Window</button>
       </div>
       <div id="windows-view"></div>
       <div class="window" id="window-el">
@@ -948,36 +948,6 @@
 initLocationAstronomy();
   render();
 })();</script>
-<script type="module">
-const totalWindows = 3;
-let currentIndex = 0;
-
-function updateLabel() {
-  const label = document.getElementById('window-label');
-  if (!label) return;
-  label.textContent = `Window ${currentIndex + 1}/${totalWindows}`;
-  label.classList.add('pulse');
-  setTimeout(() => label.classList.remove('pulse'), 300);
-  console.log('stage2-demo: switched to', currentIndex + 1, '/', totalWindows);
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const prev = document.getElementById('window-prev');
-  const next = document.getElementById('window-next');
-  if (prev) {
-    prev.addEventListener('click', () => {
-      currentIndex = (currentIndex + totalWindows - 1) % totalWindows;
-      updateLabel();
-    });
-  }
-  if (next) {
-    next.addEventListener('click', () => {
-      currentIndex = (currentIndex + 1) % totalWindows;
-      updateLabel();
-    });
-  }
-  updateLabel();
-});
-</script>
+<script type="module" src="./windows.js"></script>
 </body>
 </html>
