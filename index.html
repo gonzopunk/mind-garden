@@ -36,6 +36,10 @@
   @media(max-width:700px){ .plants-grid{grid-template-columns:1fr} }
   .progress{position:relative; height:8px; background:#eef2ff; border-radius:999px; overflow:hidden}
   .progress .bar{height:100%; background:#34d399}
+  .window-toolbar{display:flex; align-items:center; gap:8px; margin-bottom:8px}
+  .window-toolbar .label{flex:1; text-align:center}
+  .toast{position:fixed; left:50%; bottom:16px; transform:translateX(-50%); background:#333; color:#fff; padding:8px 12px; border-radius:8px; z-index:1000; font-size:14px}
+  .toast button{margin-left:12px}
   /* window environment */
   .window{position:relative; border-radius:16px; overflow:hidden; box-shadow: inset 0 2px 6px rgba(0,0,0,.06); height:var(--win-h)}
   .sky{position:absolute; inset:0; background:linear-gradient(var(--sky1), var(--sky2)); z-index:0; transition: background .5s linear}
@@ -81,6 +85,7 @@
 
 <!-- SunCalc for sunrise/sunset + moon calculations -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+<script src="windows.js"></script>
 
 <script>
 (function(){
@@ -200,15 +205,16 @@
       s.__ppActive=false;
       delete s.plantSlots; // single-plant mode: no slots
       delete s.pendingPlantUnlock; // remove streak unlock flag
+      initWindowsState(s);
       return s;
     }catch{ return fresh(); }
   })();
 
   function fresh(){
     return { config:{...DEFAULT_CONFIG}, day:{ date: todayKey(), actionsRemaining: DEFAULT_CONFIG.dailyActions, plants: [DEFAULT_PLANT()], playedToday:false },
-      streak:0, lastPlayDate:null, gallery:[], sessionActive:false, cooldownUntil:0, breathPrepUntil:0, postPauseUntil:0, actionCount:0, lastFact:'',
+      streak:0, lastPlayDate:null, sessionActive:false, cooldownUntil:0, breathPrepUntil:0, postPauseUntil:0, actionCount:0, lastFact:'',
       arrangeMode:false, unlimitedActions:false, devMode:false, devSliderHour:13.0, devTimeOverride:false, __ppActive:false,
-      location:{ geoEnabled:false, coords:null, denied:false } };
+      location:{ geoEnabled:false, coords:null, denied:false }, windows:[{id:'win-1', plants:[]}], activeWindowId:'win-1', softWindowCap:3 };
   }
   function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
@@ -270,17 +276,22 @@
   }
   function placePlantFromIndex(i, index){
     const p = state.day.plants[i]; if (!p || !p.readyToPlace) return;
-    insertIntoGallery(p, index);
-    state.day.plants[i] = DEFAULT_PLANT(); // single-plant loop: replace placed plant
+    placePlantToActiveWindow(p, index);
+    state.day.plants[i] = DEFAULT_PLANT();
+    state.__lastPlacement = {plant:p, windowId: state.activeWindowId};
     save(); render();
+    showUndoToast();
   }
-  function insertIntoGallery(plant, index){
-    const g = state.gallery||[];
-    const base = TYPE_HEIGHT[plant.flowerStyle] || 0.42;
-    const tier = Math.floor(Math.random()*HEIGHT_STEPS.length);
-    const h = Math.max(0.34, Math.min(0.62, base + HEIGHT_STEPS[tier]));
-    const xPct = (g.length===0)? 50 : Math.max(3, Math.min(97, ( (index+1)/(g.length+1) * 94 + 3 )));
-    g.splice(index, 0, {...plant, galleryH: h, heightTier: tier, xPct}); state.gallery = g;
+  function showUndoToast(){
+    const t=document.createElement('div');
+    t.className='toast';
+    t.textContent='Plant placed.';
+    const b=document.createElement('button');
+    b.textContent='Undo';
+    b.onclick=()=>{ undoPlacement(); if(state.__undoTimer) clearTimeout(state.__undoTimer); t.remove(); };
+    t.appendChild(b);
+    document.body.appendChild(t);
+    state.__undoTimer=setTimeout(()=>{ state.__lastPlacement=null; t.remove(); },5000);
   }
 
   function progressBar(v){ return `<div class="progress"><span class="bar" style="width:${Math.max(0, Math.min(100, v))}%"></span></div>`; }
@@ -428,7 +439,8 @@
   }
 
   function windowsill(){
-    const g = state.gallery||[];
+    const win = getActiveWindow();
+    const g = win.plants||[];
     let changed=false;
     const plants = g.map((gp, idx, arr)=>{
       let hRatio = gp.galleryH;
@@ -449,11 +461,18 @@
     if (changed) save();
 
     const starContainer = buildStars();
+    const idx = state.windows.findIndex(w=>w.id===win.id);
+    const total = state.windows.length;
+    const canAdd = canAddWindow();
+    const addAttr = canAdd? '' : 'disabled title="Unlock after 4 plants on this windowsill."';
+    const toolbar = `<div class="window-toolbar"><button class="btn secondary" data-action="prev-window" ${idx===0?'disabled':''}>‹</button><div class="label">Window ${idx+1}/${total}</div><button class="btn secondary" data-action="next-window" ${idx===total-1?'disabled':''}>›</button><button class="btn secondary" data-action="add-window" ${addAttr}>+ Window</button></div>`;
+    const empty = g.length===0 ? `<div class="sign"><p>This windowsill is ready. As your plants mature, place them here.</p></div>` : '';
     return `<div class="card"><div class="content">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px">
         <div style="font-weight:600">Windowsill</div>
         <button class="btn secondary" data-action="toggle-arrange">${state.arrangeMode? 'Done':'Arrange plants'}</button>
       </div>
+      ${toolbar}
       <div class="window" id="window-el">
         <div class="sky" id="sky-bg"></div>
         <div id="sun" class="sun"></div>
@@ -468,6 +487,7 @@
           <div class="gallery-layer" id="gallery-layer">${plants}</div>
         </div>
       </div>
+      ${empty}
     </div></div>`;
   }
 
@@ -595,7 +615,7 @@
   function footerNote(){ return `<div class="small-note">Arrange positioning is now pixel-based and clamped to the gallery width—no clipping or “shrink” at any screen size.</div>`; }
 
   function softResetToday(){
-    const ok = confirm("Soft reset today? Keeps gallery & streaks; resets today's plant and actions.");
+    const ok = confirm("Soft reset today? Keeps windows & streaks; resets today's plant and actions.");
     if (!ok) return;
     state.day = { date: todayKey(), actionsRemaining: state.config.dailyActions, plants: [DEFAULT_PLANT()], playedToday:false };
     state.sessionActive=false; state.cooldownUntil=0; state.breathPrepUntil=0; state.postPauseUntil=0; state.actionCount=0; state.lastFact='';
@@ -613,8 +633,9 @@
     if (!gallery) return;
     const rect = gallery.getBoundingClientRect();
     const els = gallery.querySelectorAll('.drag-plant');
+    const g = getActiveWindow().plants;
     els.forEach((el, idx)=>{
-      const xPct = (state.gallery[idx] && typeof state.gallery[idx].xPct==='number') ? state.gallery[idx].xPct : +el.getAttribute('data-xpct') || 50;
+      const xPct = (g[idx] && typeof g[idx].xPct==='number') ? g[idx].xPct : +el.getAttribute('data-xpct') || 50;
       const centerX = (xPct/100) * rect.width;
       const w = el.getBoundingClientRect().width || 0;
       let leftPx = centerX - w/2;
@@ -631,7 +652,10 @@
         if (action==='start') startSession();
         else if (action==='end') endSession();
         else if (action==='tend') tend(+node.getAttribute('data-index'));
-        else if (action==='place-here'){ const i=+node.getAttribute('data-index'); placePlantFromIndex(i, (state.gallery?.length||0)); }
+        else if (action==='place-here'){ const i=+node.getAttribute('data-index'); placePlantFromIndex(i, (getActiveWindow().plants.length||0)); }
+        else if (action==='prev-window'){ prevWindow(); }
+        else if (action==='next-window'){ nextWindow(); }
+        else if (action==='add-window'){ addWindow(); }
         else if (action==='toggle-arrange'){ state.arrangeMode=!state.arrangeMode; save(); render(); }
         else if (action==='do-advance-days'){ const input = app.querySelector('[data-action="dev-advance-days"]'); const n = Math.max(1, parseInt(input.value||'1',10)); state.streak += n; state.day.playedToday=false; save(); render(); }
         else if (action==='reset-game'){ hardResetGame(); }
@@ -702,6 +726,16 @@
     const fbLoc = app.querySelector('[data-action="use-fallback"]');
     if (fbLoc) fbLoc.addEventListener('click', ()=>{ state.location.coords=null; state.location.denied=true; save(); render(); });
 
+    const winSwipe = document.getElementById('window-el');
+    if (winSwipe){
+      let sx=null;
+      winSwipe.addEventListener('touchstart', e=>{ sx=e.touches[0].clientX; });
+      winSwipe.addEventListener('touchend', e=>{
+        if(sx==null) return; const dx=e.changedTouches[0].clientX - sx; if(Math.abs(dx)>50){ if(dx<0) nextWindow(); else prevWindow(); }
+        sx=null;
+      });
+    }
+
     const dm = app.querySelector('[data-action="toggle-dev-mode"]');
     if (dm) dm.addEventListener('change', ()=>{ state.devMode = dm.checked; save(); render(); });
 
@@ -745,7 +779,8 @@
       leftPx = Math.max(0, Math.min(rect.width - w, leftPx));
       el.style.left = leftPx + 'px';
       const xPct = (cx / rect.width) * 100;
-      if (state.gallery[draggingIdx]) state.gallery[draggingIdx].xPct = xPct;
+      const g = getActiveWindow().plants;
+      if (g[draggingIdx]) g[draggingIdx].xPct = xPct;
     }
     function onUp(){
       if (draggingIdx==null) return;
