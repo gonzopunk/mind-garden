@@ -460,10 +460,10 @@
         <button class="btn secondary" data-action="toggle-arrange">${state.arrangeMode? 'Done':'Arrange plants'}</button>
       </div>
       <div id="windows-toolbar">
-        <button id="window-prev" class="btn secondary">‹</button>
-        <div id="window-label">Window 1/3</div>
-        <button id="window-next" class="btn secondary">›</button>
-        <button id="window-add" class="btn secondary" disabled>+ Window</button>
+        <button id="window-prev" aria-label="Previous Window">‹</button>
+        <span id="window-label">Window 1/3</span>
+        <button id="window-next" aria-label="Next Window">›</button>
+        <button id="window-add" aria-label="Add Window" disabled>+ Window</button>
       </div>
       <div id="windows-view"></div>
       <div class="window" id="window-el">
@@ -948,6 +948,6 @@
   initLocationAstronomy();
   render();
 })();</script>
-<script type="module" src="./windows.js"></script>
+<script type="module" src="./windows-demo.js"></script>
 </body>
 </html>
