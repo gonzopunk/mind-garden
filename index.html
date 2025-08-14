@@ -85,7 +85,7 @@
 
 <!-- SunCalc for sunrise/sunset + moon calculations -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
-<script src="windows.js"></script>
+<script type="module" src="./windows.js"></script>
 
 <script>
 (function(){
@@ -205,7 +205,6 @@
       s.__ppActive=false;
       delete s.plantSlots; // single-plant mode: no slots
       delete s.pendingPlantUnlock; // remove streak unlock flag
-      initWindowsState(s);
       return s;
     }catch{ return fresh(); }
   })();
@@ -947,7 +946,7 @@
 
   function render(){
     const app = document.getElementById('app');
-    app.innerHTML = `<h1>Mind Garden <span class="tag">Prototype</span></h1>${statusBar()}${unlockNotice()}<div id="breathing-panel">${breathingCards()}</div>${garden()}${windowsill()}${settingsPanel()}${footerNote()}`;
+    app.innerHTML = `<h1>Mind Garden <span class="tag">Prototype</span></h1>${statusBar()}${unlockNotice()}<div id="breathing-panel">${breathingCards()}</div>${garden()}<div class="card" id="windows-root"><div class="content"><div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px"><div style="font-weight:600">Windowsill</div><button class="btn secondary" data-action="toggle-arrange">${state.arrangeMode? 'Done':'Arrange plants'}</button></div><div id="windows-toolbar"></div><div id="windows-view"></div></div></div>${settingsPanel()}${footerNote()}`;
     bind(); positionAstronomy();
   }
 
@@ -967,6 +966,11 @@
       }
     }
   }, 300);
+
+  window.state = state;
+  window.save = save;
+  window.render = render;
+  window.plantSVG = plantSVG;
 
   initLocationAstronomy();
   render();
