@@ -393,7 +393,7 @@
               ${["terracotta","striped","ceramic","classic"].map(ps=> `<option value="${ps}" ${p.potStyle===ps?'selected':''}>${ps[0].toUpperCase()+ps.slice(1)}</option>`).join('')}
           </select></div>
         </div>
-        <div class="row" style="margin-top:8px"><button class="btn secondary" data-action="lock-type" data-index="${i}">Lock selections</button></div>`
+        <div class="row" style="margin-top:8px"><button class="btn secondary" data-action="lock-type" data-index="${i}">Start growing</button></div>`
         : `<div class="small" style="margin-top:8px">${p.readyToPlace ? 'Fully grown.' : 'Growing steadily…'}</div>`}
       <div class="row" style="margin-top:10px"><button class="btn primary" data-action="tend" data-index="${i}" ${!canAct?'disabled':''}>${buttonLabel}</button></div>
       ${localPlace}
