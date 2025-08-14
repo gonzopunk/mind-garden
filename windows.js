@@ -27,14 +27,19 @@ function save() {
   localStorage.setItem(LS_KEY, JSON.stringify(state));
 }
 
-function labelIndex() {
-  return state.windows.findIndex(w => w.id === state.activeWindowId);
+function activeIndex() {
+  const idx = state.windows.findIndex(w => w.id === state.activeWindowId);
+  if (idx === -1) {
+    state.activeWindowId = state.windows[0].id;
+    return 0;
+  }
+  return idx;
 }
 
 function updateLabel() {
   const label = document.getElementById('window-label');
   if (!label) return;
-  const idx = labelIndex();
+  const idx = activeIndex();
   label.textContent = `Window ${idx + 1}/${state.windows.length}`;
   label.classList.add('pulse');
   setTimeout(() => label.classList.remove('pulse'), 300);
@@ -52,7 +57,7 @@ function updateView() {
 }
 
 function switchWindow(offset) {
-  const idx = labelIndex();
+  const idx = activeIndex();
   const total = state.windows.length;
   const newIdx = (idx + offset + total) % total;
   state.activeWindowId = state.windows[newIdx].id;
@@ -71,7 +76,7 @@ function addWindow() {
   updateView();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function init() {
   const prev = document.getElementById('window-prev');
   const next = document.getElementById('window-next');
   const add = document.getElementById('window-add');
@@ -80,4 +85,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (add) add.addEventListener('click', addWindow);
   updateLabel();
   updateView();
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
