@@ -48,7 +48,8 @@
   .window-inner{position:relative; z-index:4; height:100%}
   .sun,.moon{position:absolute; width:64px; height:64px; border-radius:999px; transform:translate(-50%, -50%); z-index:1}
   .sun{background:#fde047; opacity:.9}
-  .moon{background:#e2e8f0; opacity:0; box-shadow:0 0 8px rgba(255,255,255,.35) inset}
+  .moon{background:#e2e8f0; opacity:0; box-shadow:0 0 8px rgba(255,255,255,.35) inset; overflow:hidden}
+  .moon-shadow{position:absolute; top:0; left:0; width:100%; height:100%; background:#1e293b; border-radius:999px; transform-origin:center; transition:transform 0.3s ease}
   .cloud-band{position:absolute; left:0; right:0; display:flex; justify-content:space-around; z-index:2}
   .cloud{position:relative; opacity:.9; transition:opacity .5s linear}
   .cloud .b{position:absolute; background:#fff; border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,.06)}
@@ -457,7 +458,9 @@
       <div class="window" id="window-el">
         <div class="sky" id="sky-bg"></div>
         <div id="sun" class="sun"></div>
-        <div id="moon" class="moon"></div>
+		<div id="moon" class="moon">
+		  <div class="moon-shadow" id="moon-shadow"></div>
+		</div>
         <div id="clouds1" class="cloud-band" style="top: 40px; animation: cloudRL1 120s linear infinite">${cloud(110)} ${cloud(150)} ${cloud(100)}</div>
         <div id="clouds2" class="cloud-band" style="top: calc(((var(--win-h) - var(--ground-h)) * 0.35) - 60px); animation: cloudRL2 180s linear infinite">${cloud(130)} ${cloud(90)}</div>
         <div class="ground"></div>
@@ -829,6 +832,26 @@
     return now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
   }
 
+  function updateMoonPhase(moonElement, shadowElement, illumination) {
+    if (!illumination) return;
+    const { fraction, phase } = illumination;
+    if (fraction >= 0.99) {
+      shadowElement.style.opacity = '0';
+    } else if (fraction <= 0.01) {
+      shadowElement.style.opacity = '1';
+      shadowElement.style.transform = 'translateX(0%)';
+    } else {
+      shadowElement.style.opacity = '1';
+      let shadowOffset;
+      if (phase < 0.5) {
+        shadowOffset = -100 + (phase * 2 * 100);
+      } else {
+        shadowOffset = 100 - ((phase - 0.5) * 2 * 100);
+      }
+      shadowElement.style.transform = `translateX(${shadowOffset}%)`;
+    }
+  }
+
   function positionAstronomy(){
     const winH = getCssNumber('--win-h'), groundH=getCssNumber('--ground-h');
     const grassTopPct = ((winH - groundH)/winH)*100;
@@ -865,6 +888,11 @@
       if (stars) stars.style.opacity = darkness;
       if (sun)  sun.style.opacity  = (dayT>0 && dayT<1) ? (0.9 * (1 - dusk)) : 0;
       if (moon) moon.style.opacity = (nightT>0 && nightT<1) ? (0.8 * (1 - dawn)) : 0;
+	  if (moon && document.getElementById('moon-shadow')) {
+  const now = currentTime();
+  const moonIllum = SunCalc.getMoonIllumination(now);
+  updateMoonPhase(moon, document.getElementById('moon-shadow'), moonIllum);
+}
     } else {
       const loc = state.location.coords || FALLBACK_LOC;
       const now = currentTime();
@@ -899,6 +927,9 @@
         const scale = 0.75 + 0.25*astro.moonIllum.fraction;
         moon.style.transform = `translate(-50%, -50%) scale(${scale})`;
       }
+	  if (moon && document.getElementById('moon-shadow')) {
+  updateMoonPhase(moon, document.getElementById('moon-shadow'), astro.moonIllum);
+}
     }
   }
 
