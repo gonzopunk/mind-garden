@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mind Garden — v10.23 (single-file)</title>
+<title>Mind Garden — v12 (weather)</title>
 <style>
   :root{
     --card:#fff; --ink:#0f172a; --muted:#64748b;
@@ -83,6 +83,13 @@
   .sill-dots{position:absolute; bottom:52px; left:50%; transform:translateX(-50%); z-index:8; display:flex; gap:8px}
   .sill-dot{width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.5); border:1px solid rgba(0,0,0,.1); cursor:pointer}
   .sill-dot.active{background:#10b981}
+  /* weather effects */
+  .weather-layer{position:absolute; inset:0; z-index:2; pointer-events:none; overflow:hidden}
+  .rain-drop{position:absolute; width:1px; height:12px; background:linear-gradient(transparent, rgba(174,194,224,0.6)); animation:rain-fall linear infinite}
+  @keyframes rain-fall{0%{transform:translateY(-20px)}100%{transform:translateY(calc(var(--win-h) + 20px))}}
+  .snow-flake{position:absolute; width:4px; height:4px; background:white; border-radius:50%; opacity:0.8; animation:snow-fall linear infinite}
+  @keyframes snow-fall{0%{transform:translateY(-10px) translateX(0)}100%{transform:translateY(calc(var(--win-h) + 10px)) translateX(20px)}}
+  .thermometer{position:absolute; top:12px; right:12px; z-index:8; background:rgba(255,255,255,0.9); border:1px solid #e5e7eb; border-radius:8px; padding:6px 10px; font-size:14px; font-weight:600; box-shadow:0 2px 4px rgba(0,0,0,.08)}
 </style>
 </head>
 <body>
@@ -95,6 +102,19 @@
 (function(){
   const SUNRISE_H = 7, SUNSET_H = 19; // single-plant mode
   const FALLBACK_LOC = { lat:41.8781, lon:-87.6298 }; // Chicago fallback
+  const WEATHER_CACHE_MS = 15 * 60 * 1000; // 15 minutes
+  
+  // Open-Meteo weather code mapping
+  const WEATHER_CODES = {
+    0: 'clear', 1: 'clear', 2: 'partly-cloudy', 3: 'cloudy',
+    45: 'fog', 48: 'fog',
+    51: 'drizzle', 53: 'drizzle', 55: 'drizzle',
+    61: 'rain', 63: 'rain', 65: 'rain', 66: 'rain', 67: 'rain',
+    71: 'snow', 73: 'snow', 75: 'snow', 77: 'snow', 85: 'snow', 86: 'snow',
+    80: 'rain', 81: 'rain', 82: 'rain',
+    95: 'thunderstorm', 96: 'thunderstorm', 99: 'thunderstorm'
+  };
+  
   const fmt2 = (n)=> String(n).padStart(2,'0');
   const toAmPm = (h,m)=>{ const period = h>=12 ? "p.m." : "a.m."; const hh = h%12===0? 12 : h%12; return hh+":"+fmt2(m)+" "+period; };
   // Use local time instead of UTC so daily resets align with the user's timezone
@@ -237,6 +257,7 @@
       if (!('postActionPauseEnabled' in s.config)) s.config.postActionPauseEnabled = true;
       if (!('postActionPauseSec' in s.config)) s.config.postActionPauseSec = 3;
       if (!s.location) s.location = { geoEnabled:false, coords:null, denied:false };
+      if (!s.weather) s.weather = { enabled:false, data:null, lastFetch:0, tempUnit:'auto' };
       if (!('devTimeOverride' in s)) s.devTimeOverride = false;
       s.sessionActive=false; s.cooldownUntil=0; s.breathPrepUntil=0; s.postPauseUntil=0; s.actionCount=0; s.lastFact=''; s.arrangeMode=false;
       s.unlimitedActions=false; s.devMode=false; s.devSliderHour=13.0;
@@ -254,7 +275,8 @@
       streak:0, lastPlayDate:null, windowsills: [{ id: 0, theme: 0, plants: [], unlockedAt: 0 }], currentSillIndex: 0,
       sessionActive:false, cooldownUntil:0, breathPrepUntil:0, postPauseUntil:0, actionCount:0, lastFact:'',
       arrangeMode:false, unlimitedActions:false, devMode:false, devSliderHour:13.0, devTimeOverride:false, __ppActive:false,
-      movingPlantIndex:null, location:{ geoEnabled:false, coords:null, denied:false } };
+      movingPlantIndex:null, location:{ geoEnabled:false, coords:null, denied:false },
+      weather:{ enabled:false, data:null, lastFetch:0, tempUnit:'auto' } };
   }
   function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
   
@@ -533,6 +555,65 @@
     for(let i=0;i<n;i++){ const s=document.createElement('div'); const size=Math.random()<0.85?2:3; s.style.cssText=`position:absolute;width:${size}px;height:${size}px;border-radius:50%;background:rgba(255,255,255,.9);left:${Math.round(Math.random()*100)}%;top:${Math.round(Math.random()*70)}%`; container.appendChild(s); }
     return container;
   }
+  
+  function buildWeatherEffects(){
+    if (!state.weather.enabled || !state.weather.data) return '';
+    
+    const condition = state.weather.data.condition;
+    const container = document.createElement('div');
+    container.className = 'weather-layer';
+    
+    if (condition === 'rain' || condition === 'drizzle' || condition === 'thunderstorm') {
+      const dropCount = condition === 'drizzle' ? 30 : 50;
+      for(let i=0; i<dropCount; i++){
+        const drop = document.createElement('div');
+        drop.className = 'rain-drop';
+        drop.style.cssText = `left:${Math.random()*100}%;animation-duration:${0.5 + Math.random()*0.3}s;animation-delay:${Math.random()*2}s`;
+        container.appendChild(drop);
+      }
+    } else if (condition === 'snow') {
+      for(let i=0; i<40; i++){
+        const flake = document.createElement('div');
+        flake.className = 'snow-flake';
+        flake.style.cssText = `left:${Math.random()*100}%;animation-duration:${3 + Math.random()*2}s;animation-delay:${Math.random()*3}s`;
+        container.appendChild(flake);
+      }
+    }
+    
+    return container.outerHTML;
+  }
+  
+  function getCloudConfig(){
+    if (!state.weather.enabled || !state.weather.data) {
+      return { count: 'normal', opacity: 0.9 }; // Default
+    }
+    
+    const condition = state.weather.data.condition;
+    const cloudCover = state.weather.data.cloudCover;
+    
+    if (condition === 'clear' && cloudCover < 10) {
+      return { count: 'none', opacity: 0 };
+    } else if (condition === 'clear' || condition === 'partly-cloudy') {
+      return { count: 'light', opacity: 0.7 };
+    } else if (condition === 'cloudy' || condition === 'fog') {
+      return { count: 'heavy', opacity: 0.95 };
+    } else if (condition === 'rain' || condition === 'drizzle' || condition === 'thunderstorm') {
+      return { count: 'storm', opacity: 0.85, dark: true };
+    } else if (condition === 'snow') {
+      return { count: 'heavy', opacity: 0.9, snowy: true };
+    }
+    
+    return { count: 'normal', opacity: 0.9 };
+  }
+  
+  function getTemperatureDisplay(){
+    if (!state.weather.enabled || !state.weather.data) return '';
+    
+    const unit = state.weather.tempUnit === 'auto' ? 'F' : state.weather.tempUnit;
+    const temp = unit === 'F' ? state.weather.data.temp_f : state.weather.data.temp_c;
+    
+    return `<div class="thermometer" title="Current temperature">${temp}°${unit}</div>`;
+  }
 
   function windowsill(){
     const currentSill = state.windowsills[state.currentSillIndex] || state.windowsills[0];
@@ -566,11 +647,40 @@
     if (changed) save();
 
     const starContainer = buildStars();
+    const cloudConfig = getCloudConfig();
+    const weatherEffects = buildWeatherEffects();
+    const tempDisplay = getTemperatureDisplay();
+    
     const navLeft = state.currentSillIndex > 0 ? `<div class="sill-nav left" data-action="prev-sill">‹</div>` : '';
     const navRight = state.currentSillIndex < state.windowsills.length - 1 ? `<div class="sill-nav right" data-action="next-sill">›</div>` : '';
     const dots = state.windowsills.map((_, idx) => 
       `<div class="sill-dot ${idx === state.currentSillIndex ? 'active' : ''}" data-action="goto-sill" data-sill-index="${idx}"></div>`
     ).join('');
+    
+    // Adjust cloud rendering based on weather
+    let clouds1HTML = '', clouds2HTML = '';
+    if (cloudConfig.count !== 'none') {
+      const opacity = cloudConfig.opacity;
+      const color = cloudConfig.dark ? '#6b7280' : (cloudConfig.snowy ? '#e5e7eb' : '#fff');
+      const cloudStyle = `opacity:${opacity}`;
+      
+      if (cloudConfig.count === 'light') {
+        clouds1HTML = `<div id="clouds1" class="cloud-band" style="top: 40px; animation: cloudRL1 120s linear infinite; ${cloudStyle}">${cloud(110)}</div>`;
+        clouds2HTML = `<div id="clouds2" class="cloud-band" style="top: calc(((var(--win-h) - var(--ground-h)) * 0.35) - 60px); animation: cloudRL2 180s linear infinite; ${cloudStyle}">${cloud(90)}</div>`;
+      } else if (cloudConfig.count === 'heavy' || cloudConfig.count === 'storm') {
+        clouds1HTML = `<div id="clouds1" class="cloud-band" style="top: 40px; animation: cloudRL1 120s linear infinite; ${cloudStyle}">${cloud(130)} ${cloud(160)} ${cloud(140)} ${cloud(110)}</div>`;
+        clouds2HTML = `<div id="clouds2" class="cloud-band" style="top: calc(((var(--win-h) - var(--ground-h)) * 0.35) - 60px); animation: cloudRL2 180s linear infinite; ${cloudStyle}">${cloud(150)} ${cloud(120)} ${cloud(100)}</div>`;
+      } else {
+        clouds1HTML = `<div id="clouds1" class="cloud-band" style="top: 40px; animation: cloudRL1 120s linear infinite; ${cloudStyle}">${cloud(110)} ${cloud(150)} ${cloud(100)}</div>`;
+        clouds2HTML = `<div id="clouds2" class="cloud-band" style="top: calc(((var(--win-h) - var(--ground-h)) * 0.35) - 60px); animation: cloudRL2 180s linear infinite; ${cloudStyle}">${cloud(130)} ${cloud(90)}</div>`;
+      }
+      
+      // Apply dark cloud color if needed
+      if (cloudConfig.dark || cloudConfig.snowy) {
+        clouds1HTML = clouds1HTML.replace(/class="cloud"/g, `class="cloud" style="filter: brightness(${cloudConfig.dark ? 0.7 : 0.95})"`);
+        clouds2HTML = clouds2HTML.replace(/class="cloud"/g, `class="cloud" style="filter: brightness(${cloudConfig.dark ? 0.7 : 0.95})"`);
+      }
+    }
     
     // Move picker modal
     const movePicker = state.movingPlantIndex !== null ? `
@@ -606,13 +716,15 @@
         <div id="moon" class="moon">
           <div class="moon-shadow" id="moon-shadow"></div>
         </div>
-        <div id="clouds1" class="cloud-band" style="top: 40px; animation: cloudRL1 120s linear infinite">${cloud(110)} ${cloud(150)} ${cloud(100)}</div>
-        <div id="clouds2" class="cloud-band" style="top: calc(((var(--win-h) - var(--ground-h)) * 0.35) - 60px); animation: cloudRL2 180s linear infinite">${cloud(130)} ${cloud(90)}</div>
+        ${clouds1HTML}
+        ${clouds2HTML}
+        ${weatherEffects}
         <div class="ground"></div>
         <div class="mullion-h"></div><div class="mullion-v"></div><div class="frame"></div>
         <div class="sill" style="background:${theme.sillColor}"></div>
         ${curtains()}
         ${starContainer.outerHTML}
+        ${tempDisplay}
         ${navLeft}
         ${navRight}
         ${state.windowsills.length > 1 ? `<div class="sill-dots">${dots}</div>` : ''}
@@ -709,6 +821,17 @@
         <div class="row" style="gap:8px; margin-top:8px"><span class="small">Change location:</span><button class="btn secondary" data-action="request-location">Re-request location</button><button class="btn secondary" data-action="use-fallback">Use fallback city</button></div>
         ${state.location.denied ? '<div class="small-note" style="margin-top:4px">Using fallback city (Chicago).</div>' : ''}
       ` : ''}
+      <div class="row" style="gap:12px; margin-top:10px">
+        <label class="row" style="gap:6px"><input type="checkbox" data-action="toggle-weather" ${state.weather.enabled?'checked':''}><span class="small">Show real weather (requires location)</span></label>
+      </div>
+      ${state.weather.enabled ? `
+        <div class="row" style="gap:8px; margin-top:8px">
+          <span class="small">Temperature:</span>
+          <label class="row" style="gap:4px"><input type="radio" name="temp-unit" data-action="set-temp-unit" value="F" ${state.weather.tempUnit==='F'?'checked':''}><span class="small">°F</span></label>
+          <label class="row" style="gap:4px"><input type="radio" name="temp-unit" data-action="set-temp-unit" value="C" ${state.weather.tempUnit==='C'?'checked':''}><span class="small">°C</span></label>
+          ${state.weather.data ? `<span class="small">(${state.weather.data.condition})</span>` : ''}
+        </div>
+      ` : ''}
       <div class="row" style="margin-top:12px">
         <button class="btn" data-action="soft-reset" style="border-color:#2563eb; color:#1d4ed8">Soft reset (today only)</button>
         <button class="btn" data-action="reset-game" style="border-color:#ef4444; color:#b91c1c">Reset game (erase progress)</button>
@@ -747,7 +870,7 @@
 
   function formatHour(h){ const hh=Math.floor(h); const mm=Math.round((h-hh)*60); const period = hh>=12 ? "p.m." : "a.m."; const dispH = ((hh%12)||12); return `${dispH}:${fmt2(mm)} ${period}`; }
   function settingsPanel(){ return `${generalSettings()}${devSettings()}`; }
-  function footerNote(){ return `<div class="small-note">Multiple windowsills unlock every 5 plants. Swipe or use arrows to navigate. In Arrange mode, use the "Move" button to transfer plants between windowsills!</div>`; }
+  function footerNote(){ return `<div class="small-note">Multiple windowsills unlock every 5 plants. Swipe or use arrows to navigate. In Arrange mode, use the "Move" button to transfer plants between windowsills! Enable real weather in Settings to see current conditions.</div>`; }
 
   function softResetToday(){
     const ok = confirm("Soft reset today? Keeps windowsills & streaks; resets today's plant and actions.");
@@ -880,6 +1003,29 @@
     const fbLoc = app.querySelector('[data-action="use-fallback"]');
     if (fbLoc) fbLoc.addEventListener('click', ()=>{ state.location.coords=null; state.location.denied=true; save(); render(); });
 
+    const weatherToggle = app.querySelector('[data-action="toggle-weather"]');
+    if (weatherToggle) weatherToggle.addEventListener('change', ()=>{ 
+      state.weather.enabled = weatherToggle.checked; 
+      if (weatherToggle.checked) {
+        if (!state.location.geoEnabled) {
+          state.location.geoEnabled = true;
+          state.location.denied = false;
+          initLocationAstronomy();
+        }
+        fetchWeather();
+      }
+      save(); render(); 
+    });
+    
+    app.querySelectorAll('[data-action="set-temp-unit"]').forEach(radio => {
+      radio.addEventListener('change', ()=> {
+        if (radio.checked) {
+          state.weather.tempUnit = radio.value;
+          save(); render();
+        }
+      });
+    });
+
     const dm = app.querySelector('[data-action="toggle-dev-mode"]');
     if (dm) dm.addEventListener('change', ()=>{ state.devMode = dm.checked; save(); render(); });
 
@@ -995,12 +1141,55 @@
         state.location.coords = {lat: pos.coords.latitude, lon: pos.coords.longitude};
         state.location.denied=false;
         save(); positionAstronomy(); render();
+        if (state.weather.enabled) fetchWeather();
       }, err=>{
         state.location.coords=null; state.location.denied=true;
         save(); positionAstronomy(); render();
       }, {timeout:10000});
     } else {
       state.location.denied=true;
+    }
+  }
+
+  // Fetch weather from Open-Meteo API
+  async function fetchWeather(){
+    if (!state.weather.enabled) return;
+    
+    const now = Date.now();
+    if (state.weather.data && (now - state.weather.lastFetch < WEATHER_CACHE_MS)) {
+      return; // Use cached data
+    }
+    
+    const loc = state.location.coords || FALLBACK_LOC;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,weather_code,cloud_cover,precipitation&temperature_unit=fahrenheit&timezone=auto`;
+    
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.current) {
+        state.weather.data = {
+          temp_f: Math.round(data.current.temperature_2m),
+          temp_c: Math.round((data.current.temperature_2m - 32) * 5/9),
+          weatherCode: data.current.weather_code,
+          condition: WEATHER_CODES[data.current.weather_code] || 'clear',
+          cloudCover: data.current.cloud_cover || 0,
+          precipitation: data.current.precipitation || 0
+        };
+        state.weather.lastFetch = now;
+        
+        // Auto-set temp unit based on location if set to 'auto'
+        if (state.weather.tempUnit === 'auto') {
+          // US uses Fahrenheit, most other places use Celsius
+          const usesF = loc.lat > 24 && loc.lat < 50 && loc.lon > -125 && loc.lon < -65;
+          state.weather.tempUnit = usesF ? 'F' : 'C';
+        }
+        
+        save();
+        render();
+      }
+    } catch (error) {
+      console.warn('Weather fetch failed:', error);
     }
   }
 
@@ -1186,7 +1375,15 @@
     }
   }, 300);
 
+  // Periodic weather updates (every 5 minutes)
+  setInterval(()=>{
+    if (state.weather.enabled) {
+      fetchWeather();
+    }
+  }, 5 * 60 * 1000);
+
   initLocationAstronomy();
+  if (state.weather.enabled) fetchWeather();
   render();
 })();</script>
 </body>
