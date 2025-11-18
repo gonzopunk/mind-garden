@@ -75,6 +75,14 @@
   .curtain-svg.left{left:0}
   .curtain-svg.right{right:0; transform:scaleX(-1)}
   .valance-svg{position:absolute; left:0; right:0; top:0; height:44px; width:100%; filter:drop-shadow(0 2px 4px rgba(0,0,0,.08))}
+  /* windowsill navigation */
+  .sill-nav{position:absolute; top:50%; transform:translateY(-50%); z-index:8; background:rgba(255,255,255,.9); border:1px solid #e5e7eb; border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.1)}
+  .sill-nav:hover{background:#fff}
+  .sill-nav.left{left:8px}
+  .sill-nav.right{right:8px}
+  .sill-dots{position:absolute; bottom:52px; left:50%; transform:translateX(-50%); z-index:8; display:flex; gap:8px}
+  .sill-dot{width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.5); border:1px solid rgba(0,0,0,.1); cursor:pointer}
+  .sill-dot.active{background:#10b981}
 </style>
 </head>
 <body>
@@ -114,6 +122,14 @@
   const POT_STYLES = ["terracotta","striped","ceramic","classic"];
   const TYPE_HEIGHT = { daisy:0.42, sunflower:0.50, tulip:0.36, lotus:0.46, bell:0.40 };
   const HEIGHT_STEPS = [0, 0.12, 0.24];
+  
+  const WINDOWSILL_THEMES = [
+    { name: "Classic Wood", sillColor: "#fbbf24", frameColor: "#fcd34d", bgTint: "rgba(251, 191, 36, 0.05)" },
+    { name: "White Paint", sillColor: "#f8fafc", frameColor: "#e2e8f0", bgTint: "rgba(248, 250, 252, 0.05)" },
+    { name: "Dark Walnut", sillColor: "#78350f", frameColor: "#92400e", bgTint: "rgba(120, 53, 15, 0.05)" },
+    { name: "Stone Grey", sillColor: "#64748b", frameColor: "#94a3b8", bgTint: "rgba(100, 116, 139, 0.05)" },
+    { name: "Sage Green", sillColor: "#84cc16", frameColor: "#a3e635", bgTint: "rgba(132, 204, 22, 0.05)" }
+  ];
 
   const DOPAMINE_FACTS = [
     "Unpredictable rewards keep prediction errors high; predictability reduces compulsive checking.",
@@ -126,7 +142,7 @@
     "Warm starts beat heroic sprints: two easy actions now beat a perfect plan later.",
     "Label the habit loop out loud—naming it reduces its pull.",
     "Make success visible but calm: steady growth, not fireworks.",
-    "Protect mornings—early checks can hijack the day’s reward budget.",
+    "Protect mornings—early checks can hijack the day's reward budget.",
     "Track effort, not perfection—missed days are potholes, not cliffs.",
     "Nourish basics first; brains are living gardens.",
     "Your brain notices change, not sameness—keep tools boring, goals clear.",
@@ -137,12 +153,12 @@
     "Swap 'doom scroll' with 'single scroll': open one page, one purpose.",
     "Short, timed bouts of focus train dopamine to expect closure.",
     "Write wins down—visible progress nudges the next step.",
-    "If it’s urgent, it can wait one breath. If it can’t, call.",
+    "If it's urgent, it can wait one breath. If it can't, call.",
     "Savoring small wins builds resilience more reliably than big highs.",
     "Practice quitting on time: ends teach your brain that stopping is safe.",
     "Make friction your friend—extra steps reduce compulsive checking.",
     "Pair a cue with a calm act: one stretch, one breath, then choose.",
-    "Schedule fun on purpose so it doesn’t leak into everything else.",
+    "Schedule fun on purpose so it doesn't leak into everything else.",
     "Learning sticks when effort is spaced and sleep follows.",
     "Environment beats willpower: rearrange the room, change the loop.",
     "When stuck, lower the bar—do the smallest true next step.",
@@ -164,28 +180,54 @@
       if (!s.day || s.day.date!==today){
         s.day = { date: today, actionsRemaining: (s.config?.dailyActions||DEFAULT_CONFIG.dailyActions), plants: s.day?.plants || [DEFAULT_PLANT()], playedToday:false };
       }
-      if (!s.gallery) s.gallery = [];
-      s.gallery = s.gallery.map((gp,i,arr)=> {
-        let base = (TYPE_HEIGHT[gp.flowerStyle||'daisy']||0.42);
-        let tier = (gp.heightTier!=null? gp.heightTier : Math.floor(Math.random()*HEIGHT_STEPS.length));
-        let h = base + HEIGHT_STEPS[tier];
-        if (gp.galleryH!=null) h = gp.galleryH; // preserve existing
-        return { xPct: (gp.xPct!=null? gp.xPct : ( (i+1)/(arr.length+1) * 94 + 3 ) ), galleryH: Math.max(0.34, Math.min(0.62, h)), heightTier: tier, ...gp };
-      });
+      
+      // Migrate old gallery to windowsills structure
+      if (s.gallery && !s.windowsills) {
+        const themeIndex = 0;
+        s.windowsills = [{
+          id: 0,
+          theme: themeIndex,
+          plants: s.gallery.map((gp,i,arr)=> {
+            let base = (TYPE_HEIGHT[gp.flowerStyle||'daisy']||0.42);
+            let tier = (gp.heightTier!=null? gp.heightTier : Math.floor(Math.random()*HEIGHT_STEPS.length));
+            let h = base + HEIGHT_STEPS[tier];
+            if (gp.galleryH!=null) h = gp.galleryH;
+            return { xPct: (gp.xPct!=null? gp.xPct : ( (i+1)/(arr.length+1) * 94 + 3 ) ), galleryH: Math.max(0.34, Math.min(0.62, h)), heightTier: tier, ...gp };
+          }),
+          unlockedAt: s.streak || 0
+        }];
+        delete s.gallery;
+      }
+      
+      if (!s.windowsills) s.windowsills = [{ id: 0, theme: 0, plants: [], unlockedAt: 0 }];
+      if (s.currentSillIndex == null) s.currentSillIndex = 0;
+      
+      // Ensure windowsills data is valid
+      s.windowsills = s.windowsills.map(sill => ({
+        ...sill,
+        plants: (sill.plants || []).map((gp,i,arr)=> {
+          let base = (TYPE_HEIGHT[gp.flowerStyle||'daisy']||0.42);
+          let tier = (gp.heightTier!=null? gp.heightTier : Math.floor(Math.random()*HEIGHT_STEPS.length));
+          let h = base + HEIGHT_STEPS[tier];
+          if (gp.galleryH!=null) h = gp.galleryH;
+          return { xPct: (gp.xPct!=null? gp.xPct : ( (i+1)/(arr.length+1) * 94 + 3 ) ), galleryH: Math.max(0.34, Math.min(0.62, h)), heightTier: tier, ...gp };
+        })
+      }));
+      
       s.day.plants = (s.day.plants||[]).map(p=> ({ lowerLeafLeft: (p.lowerLeafLeft!=null?p.lowerLeafLeft:(Math.random()<0.5)), bellDir:(p.bellDir!=null?p.bellDir:(Math.random()<0.5?-1:1)), ...p }));
       if (s.day.plants.length>1){
         const [first,...rest] = s.day.plants;
         s.day.plants = [first];
-        // Single-plant mode: move completed extras to gallery
+        // Single-plant mode: move completed extras to current windowsill
         rest.forEach(p=>{
           if ((p.growth||0)>=100){
-            const g = s.gallery;
+            const currentSill = s.windowsills[s.currentSillIndex];
             const base = TYPE_HEIGHT[p.flowerStyle||'daisy']||0.42;
             const tier = Math.floor(Math.random()*HEIGHT_STEPS.length);
             const h = Math.max(0.34, Math.min(0.62, base + HEIGHT_STEPS[tier]));
-            const index = g.length;
-            const xPct = (g.length===0)? 50 : Math.max(3, Math.min(97, ( (index+1)/(g.length+1) * 94 + 3 )));
-            g.splice(index,0,{...p, galleryH:h, heightTier:tier, xPct});
+            const index = currentSill.plants.length;
+            const xPct = (currentSill.plants.length===0)? 50 : Math.max(3, Math.min(97, ( (index+1)/(currentSill.plants.length+1) * 94 + 3 )));
+            currentSill.plants.splice(index,0,{...p, galleryH:h, heightTier:tier, xPct});
           }
         });
       }
@@ -199,33 +241,55 @@
       s.sessionActive=false; s.cooldownUntil=0; s.breathPrepUntil=0; s.postPauseUntil=0; s.actionCount=0; s.lastFact=''; s.arrangeMode=false;
       s.unlimitedActions=false; s.devMode=false; s.devSliderHour=13.0;
       s.__ppActive=false;
+      s.movingPlantIndex=null; // Track which plant is being moved
       delete s.plantSlots; // single-plant mode: no slots
       delete s.pendingPlantUnlock; // remove streak unlock flag
+      delete s.gallery; // remove old gallery structure
       return s;
     }catch{ return fresh(); }
   })();
 
   function fresh(){
     return { config:{...DEFAULT_CONFIG}, day:{ date: todayKey(), actionsRemaining: DEFAULT_CONFIG.dailyActions, plants: [DEFAULT_PLANT()], playedToday:false },
-      streak:0, lastPlayDate:null, gallery:[], sessionActive:false, cooldownUntil:0, breathPrepUntil:0, postPauseUntil:0, actionCount:0, lastFact:'',
+      streak:0, lastPlayDate:null, windowsills: [{ id: 0, theme: 0, plants: [], unlockedAt: 0 }], currentSillIndex: 0,
+      sessionActive:false, cooldownUntil:0, breathPrepUntil:0, postPauseUntil:0, actionCount:0, lastFact:'',
       arrangeMode:false, unlimitedActions:false, devMode:false, devSliderHour:13.0, devTimeOverride:false, __ppActive:false,
-      location:{ geoEnabled:false, coords:null, denied:false } };
+      movingPlantIndex:null, location:{ geoEnabled:false, coords:null, denied:false } };
   }
   function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+  
+  function getTotalPlantCount(){
+    return state.windowsills.reduce((sum, sill) => sum + sill.plants.length, 0);
+  }
+  
+  function checkAndUnlockWindowsills(){
+    const totalPlants = getTotalPlantCount();
+    const neededSills = Math.floor(totalPlants / 5) + 1;
+    while (state.windowsills.length < neededSills) {
+      const newId = state.windowsills.length;
+      const themeIndex = newId % WINDOWSILL_THEMES.length;
+      state.windowsills.push({
+        id: newId,
+        theme: themeIndex,
+        plants: [],
+        unlockedAt: totalPlants
+      });
+    }
+  }
 
   function markPlayed(){
     if (state.day.playedToday) return;
     const last = state.lastPlayDate, today = state.day.date;
     const y = new Date(); y.setDate(y.getDate()-1); const yesterdayKey = y.toISOString().slice(0,10);
     const newStreak = last===yesterdayKey ? (state.streak+1) : (last===today ? state.streak : (last ? 1 : 1));
-    state.day.playedToday = true; state.streak = newStreak; state.lastPlayDate = today; // single-plant mode: removed slot unlock
+    state.day.playedToday = true; state.streak = newStreak; state.lastPlayDate = today;
   }
 
   function parseUnlockTime(){
     const s = state.config.unlockTimeText || "7:00 a.m.";
-    const m1 = s.match(/^(\\d{1,2}):(\\d{2})\\s*([ap])?\\.?m?\\.?$/i);
+    const m1 = s.match(/^(\d{1,2}):(\d{2})\s*([ap])?\\.?m?\\.?$/i);
     if (m1){ let h=+m1[1], m=+m1[2], ap=m1[3]; if (ap){ ap=ap.toLowerCase(); if (ap==='p'&&h!==12) h+=12; if (ap==='a'&&h===12) h=0; } return {h, m}; }
-    const m2 = s.match(/^(\\d{1,2}):(\\d{2})$/); if (m2){ return {h:+m2[1], m:+m2[2]}; } return {h:7, m:0};
+    const m2 = s.match(/^(\d{1,2}):(\d{2})$/); if (m2){ return {h:+m2[1], m:+m2[2]}; } return {h:7, m:0};
   }
   function isLocked(){ const {h,m}=parseUnlockTime(); const d=new Date(); d.setHours(h,m,0,0); return new Date() < d; }
   function nextUnlock(){ const {h,m}=parseUnlockTime(); const now=new Date(); const d=new Date(); d.setHours(h,m,0,0); if (now>d) d.setDate(d.getDate()+1); return d; }
@@ -269,19 +333,40 @@
     });
     afterAnyAction();
   }
-  function placePlantFromIndex(i, index){
-    const p = state.day.plants[i]; if (!p || !p.readyToPlace) return;
-    insertIntoGallery(p, index);
-    state.day.plants[i] = DEFAULT_PLANT(); // single-plant loop: replace placed plant
+  
+  function placePlantFromIndex(i, sillIndex){
+    const p = state.day.plants[i]; 
+    if (!p || !p.readyToPlace) return;
+    insertIntoSill(p, sillIndex);
+    state.day.plants[i] = DEFAULT_PLANT();
+    checkAndUnlockWindowsills();
     save(); render();
   }
-  function insertIntoGallery(plant, index){
-    const g = state.gallery||[];
+  
+  function insertIntoSill(plant, sillIndex){
+    const sill = state.windowsills[sillIndex];
+    if (!sill) return;
     const base = TYPE_HEIGHT[plant.flowerStyle] || 0.42;
     const tier = Math.floor(Math.random()*HEIGHT_STEPS.length);
     const h = Math.max(0.34, Math.min(0.62, base + HEIGHT_STEPS[tier]));
-    const xPct = (g.length===0)? 50 : Math.max(3, Math.min(97, ( (index+1)/(g.length+1) * 94 + 3 )));
-    g.splice(index, 0, {...plant, galleryH: h, heightTier: tier, xPct}); state.gallery = g;
+    const xPct = (sill.plants.length===0)? 50 : Math.max(3, Math.min(97, ( (sill.plants.length+1)/(sill.plants.length+1) * 94 + 3 )));
+    sill.plants.push({...plant, galleryH: h, heightTier: tier, xPct});
+  }
+  
+  function movePlantBetweenSills(fromSillIndex, plantIndex, toSillIndex){
+    if (fromSillIndex === toSillIndex) return;
+    const fromSill = state.windowsills[fromSillIndex];
+    const toSill = state.windowsills[toSillIndex];
+    if (!fromSill || !toSill || plantIndex < 0 || plantIndex >= fromSill.plants.length) return;
+    
+    const plant = fromSill.plants[plantIndex];
+    fromSill.plants.splice(plantIndex, 1);
+    
+    const xPct = (toSill.plants.length===0)? 50 : Math.max(3, Math.min(97, ( (toSill.plants.length+1)/(toSill.plants.length+1) * 94 + 3 )));
+    toSill.plants.push({...plant, xPct});
+    
+    state.movingPlantIndex = null;
+    save(); render();
   }
 
   function progressBar(v){ return `<div class="progress"><span class="bar" style="width:${Math.max(0, Math.min(100, v))}%"></span></div>`; }
@@ -375,7 +460,9 @@
     const inPostPause = now < state.postPauseUntil;
     const canAct = state.sessionActive && (state.day.actionsRemaining>0 || state.unlimitedActions) && now>=state.cooldownUntil && !inPostPause && (p.styleLocked || p.growth>0);
     const buttonLabel = inPostPause ? String(postLeft) : "Tend";
-    const localPlace = p.readyToPlace ? `<div class="sign" style="margin-top:10px"><div class="title">🎉 Congratulations!</div><p>Your flower has reached maturity.</p><div class="row" style="margin-top:8px"><button class="btn primary" data-action="place-here" data-index="${i}">Place on windowsill</button></div></div>` : '';
+    
+    const localPlace = p.readyToPlace ? `<div class="sign" style="margin-top:10px"><div class="title">🎉 Congratulations!</div><p>Your flower has reached maturity.</p><div style="margin-top:8px">${sillPicker(i)}</div></div>` : '';
+    
     return `<div class="card" data-plant-index="${i}"><div class="content">
       <div class="small">Your plant</div>
       ${plantSVG(p)}
@@ -399,6 +486,25 @@
       <div class="row" style="margin-top:10px"><button class="btn primary" data-action="tend" data-index="${i}" ${!canAct?'disabled':''}>${buttonLabel}</button></div>
       ${localPlace}
     </div></div>`;
+  }
+  
+  function sillPicker(plantIndex){
+    const totalPlants = getTotalPlantCount();
+    const willUnlock = Math.floor((totalPlants + 1) / 5) > Math.floor(totalPlants / 5);
+    return `<div>
+      <div class="small" style="margin-bottom:8px">Choose a windowsill:</div>
+      <div class="row" style="gap:8px">
+        ${state.windowsills.map((sill, idx) => `
+          <button class="btn ${idx === state.currentSillIndex ? 'primary' : 'secondary'}" 
+                  data-action="place-on-sill" 
+                  data-plant-index="${plantIndex}" 
+                  data-sill-index="${idx}">
+            ${WINDOWSILL_THEMES[sill.theme].name}
+          </button>
+        `).join('')}
+      </div>
+      ${willUnlock ? `<div class="small-note" style="margin-top:8px">✨ This will unlock a new windowsill!</div>` : ''}
+    </div>`;
   }
 
   function curtains(){ return `<div class="curtain-wrap">
@@ -429,9 +535,12 @@
   }
 
   function windowsill(){
-    const g = state.gallery||[];
+    const currentSill = state.windowsills[state.currentSillIndex] || state.windowsills[0];
+    const theme = WINDOWSILL_THEMES[currentSill.theme];
+    const plants = currentSill.plants;
     let changed=false;
-    const plants = g.map((gp, idx, arr)=>{
+    
+    const plantsHTML = plants.map((gp, idx, arr)=>{
       let hRatio = gp.galleryH;
       if (hRatio==null){
         const base = (TYPE_HEIGHT[gp.flowerStyle||'daisy']||0.42);
@@ -440,8 +549,15 @@
         gp.galleryH=hRatio; gp.heightTier=tier; changed=true;
       }
       let x = gp.xPct; if (x==null){ x = ( (idx+1)/(arr.length+1) * 94 + 3 ); gp.xPct=x; changed=true; }
-      // Left px will be computed after mount
+      
+      // Add move button in arrange mode
+      const moveButton = state.arrangeMode && state.windowsills.length > 1 ? 
+        `<div style="position:absolute; top:4px; right:4px; z-index:10;">
+          <button class="btn secondary" style="padding:6px 10px; font-size:11px;" data-action="show-move-picker" data-plant-index="${idx}">Move</button>
+        </div>` : '';
+      
       return `<div class="drag-plant ${state.arrangeMode? 'is-arrange':''}" data-gindex="${idx}" data-xpct="${x}" style="height: calc(var(--win-h) * ${hRatio}); left:0px;">
+        ${moveButton}
         <div style="width:100%; height:92%; display:flex; align-items:flex-end; justify-content:center; overflow:visible">
           <div>${plantSVG({...gp, growth:100})}</div>
         </div>
@@ -450,26 +566,60 @@
     if (changed) save();
 
     const starContainer = buildStars();
+    const navLeft = state.currentSillIndex > 0 ? `<div class="sill-nav left" data-action="prev-sill">‹</div>` : '';
+    const navRight = state.currentSillIndex < state.windowsills.length - 1 ? `<div class="sill-nav right" data-action="next-sill">›</div>` : '';
+    const dots = state.windowsills.map((_, idx) => 
+      `<div class="sill-dot ${idx === state.currentSillIndex ? 'active' : ''}" data-action="goto-sill" data-sill-index="${idx}"></div>`
+    ).join('');
+    
+    // Move picker modal
+    const movePicker = state.movingPlantIndex !== null ? `
+      <div style="position:absolute; inset:0; background:rgba(0,0,0,0.5); z-index:20; display:flex; align-items:center; justify-content:center;" data-action="cancel-move">
+        <div style="background:white; border-radius:16px; padding:20px; max-width:400px; box-shadow:0 8px 24px rgba(0,0,0,0.2);" onclick="event.stopPropagation()">
+          <div style="font-weight:600; margin-bottom:12px;">Move plant to which windowsill?</div>
+          <div class="grid" style="gap:8px;">
+            ${state.windowsills.map((sill, idx) => {
+              const isCurrentSill = idx === state.currentSillIndex;
+              return `<button class="btn ${isCurrentSill ? 'secondary' : 'primary'}" 
+                      data-action="move-to-sill" 
+                      data-target-sill="${idx}"
+                      ${isCurrentSill ? 'disabled' : ''}>
+                ${WINDOWSILL_THEMES[sill.theme].name} ${isCurrentSill ? '(current)' : `(${sill.plants.length} plants)`}
+              </button>`;
+            }).join('')}
+          </div>
+          <div style="margin-top:12px;">
+            <button class="btn secondary" data-action="cancel-move" style="width:100%;">Cancel</button>
+          </div>
+        </div>
+      </div>
+    ` : '';
+    
     return `<div class="card"><div class="content">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px">
-        <div style="font-weight:600">Windowsill</div>
+        <div style="font-weight:600">${theme.name} (${plants.length} plants)</div>
         <button class="btn secondary" data-action="toggle-arrange">${state.arrangeMode? 'Done':'Arrange plants'}</button>
       </div>
-      <div class="window" id="window-el">
-        <div class="sky" id="sky-bg"></div>
+      <div class="window" id="window-el" style="--ring:${theme.frameColor};">
+        <div class="sky" id="sky-bg" style="${theme.bgTint ? 'background:linear-gradient('+theme.bgTint+', '+theme.bgTint+'), linear-gradient(var(--sky1), var(--sky2))' : ''}"></div>
         <div id="sun" class="sun"></div>
-		<div id="moon" class="moon">
-		  <div class="moon-shadow" id="moon-shadow"></div>
-		</div>
+        <div id="moon" class="moon">
+          <div class="moon-shadow" id="moon-shadow"></div>
+        </div>
         <div id="clouds1" class="cloud-band" style="top: 40px; animation: cloudRL1 120s linear infinite">${cloud(110)} ${cloud(150)} ${cloud(100)}</div>
         <div id="clouds2" class="cloud-band" style="top: calc(((var(--win-h) - var(--ground-h)) * 0.35) - 60px); animation: cloudRL2 180s linear infinite">${cloud(130)} ${cloud(90)}</div>
         <div class="ground"></div>
-        <div class="mullion-h"></div><div class="mullion-v"></div><div class="frame"></div><div class="sill"></div>
+        <div class="mullion-h"></div><div class="mullion-v"></div><div class="frame"></div>
+        <div class="sill" style="background:${theme.sillColor}"></div>
         ${curtains()}
         ${starContainer.outerHTML}
+        ${navLeft}
+        ${navRight}
+        ${state.windowsills.length > 1 ? `<div class="sill-dots">${dots}</div>` : ''}
         <div class="window-inner">
-          <div class="gallery-layer" id="gallery-layer">${plants}</div>
+          <div class="gallery-layer" id="gallery-layer">${plantsHTML}</div>
         </div>
+        ${movePicker}
       </div>
     </div></div>`;
   }
@@ -509,6 +659,7 @@
 
   function statusBar(){
     const {h, m} = parseUnlockTime();
+    const totalPlants = getTotalPlantCount();
     return `<div class="card"><div class="content">
       <div class="status-grid">
         <div class="status-item">
@@ -520,7 +671,8 @@
         </div>
         <div class="status-item"><div class="label">Actions left</div><div class="value">${state.unlimitedActions? '∞ (dev)' : Math.max(0, Math.ceil(state.day.actionsRemaining))}</div></div>
         <div class="status-item"><div class="label">Streak</div><div class="value">${state.streak} day${state.streak===1?'':'s'}</div></div>
-        <div class="status-item"><div class="label">Breathing</div><div class="value">${state.config.breathingEnabled? 'On':'Off'}</div></div>
+        <div class="status-item"><div class="label">Total plants</div><div class="value">${totalPlants}</div></div>
+        <div class="status-item"><div class="label">Windowsills</div><div class="value">${state.windowsills.length}</div></div>
         <div class="status-item"><div class="label">Daily unlock</div><div class="value">${toAmPm(h, m)}</div></div>
       </div>
     </div></div>`;
@@ -560,7 +712,7 @@
       <div class="row" style="margin-top:12px">
         <button class="btn" data-action="soft-reset" style="border-color:#2563eb; color:#1d4ed8">Soft reset (today only)</button>
         <button class="btn" data-action="reset-game" style="border-color:#ef4444; color:#b91c1c">Reset game (erase progress)</button>
-        <span class="small">Soft reset keeps your gallery & streaks; hard reset clears everything.</span>
+        <span class="small">Soft reset keeps your windowsills & streaks; hard reset clears everything.</span>
       </div>
     </div></div>`;
   }
@@ -595,10 +747,10 @@
 
   function formatHour(h){ const hh=Math.floor(h); const mm=Math.round((h-hh)*60); const period = hh>=12 ? "p.m." : "a.m."; const dispH = ((hh%12)||12); return `${dispH}:${fmt2(mm)} ${period}`; }
   function settingsPanel(){ return `${generalSettings()}${devSettings()}`; }
-  function footerNote(){ return `<div class="small-note">Arrange positioning is now pixel-based and clamped to the gallery width—no clipping or “shrink” at any screen size.</div>`; }
+  function footerNote(){ return `<div class="small-note">Multiple windowsills unlock every 5 plants. Swipe or use arrows to navigate. In Arrange mode, use the "Move" button to transfer plants between windowsills!</div>`; }
 
   function softResetToday(){
-    const ok = confirm("Soft reset today? Keeps gallery & streaks; resets today's plant and actions.");
+    const ok = confirm("Soft reset today? Keeps windowsills & streaks; resets today's plant and actions.");
     if (!ok) return;
     state.day = { date: todayKey(), actionsRemaining: state.config.dailyActions, plants: [DEFAULT_PLANT()], playedToday:false };
     state.sessionActive=false; state.cooldownUntil=0; state.breathPrepUntil=0; state.postPauseUntil=0; state.actionCount=0; state.lastFact='';
@@ -615,9 +767,11 @@
     const gallery = document.getElementById('gallery-layer');
     if (!gallery) return;
     const rect = gallery.getBoundingClientRect();
+    const currentSill = state.windowsills[state.currentSillIndex];
+    if (!currentSill) return;
     const els = gallery.querySelectorAll('.drag-plant');
     els.forEach((el, idx)=>{
-      const xPct = (state.gallery[idx] && typeof state.gallery[idx].xPct==='number') ? state.gallery[idx].xPct : +el.getAttribute('data-xpct') || 50;
+      const xPct = (currentSill.plants[idx] && typeof currentSill.plants[idx].xPct==='number') ? currentSill.plants[idx].xPct : +el.getAttribute('data-xpct') || 50;
       const centerX = (xPct/100) * rect.width;
       const w = el.getBoundingClientRect().width || 0;
       let leftPx = centerX - w/2;
@@ -634,8 +788,29 @@
         if (action==='start') startSession();
         else if (action==='end') endSession();
         else if (action==='tend') tend(+node.getAttribute('data-index'));
-        else if (action==='place-here'){ const i=+node.getAttribute('data-index'); placePlantFromIndex(i, (state.gallery?.length||0)); }
-        else if (action==='toggle-arrange'){ state.arrangeMode=!state.arrangeMode; save(); render(); }
+        else if (action==='place-on-sill'){ 
+          const plantIdx=+node.getAttribute('data-plant-index'); 
+          const sillIdx=+node.getAttribute('data-sill-index'); 
+          placePlantFromIndex(plantIdx, sillIdx); 
+        }
+        else if (action==='toggle-arrange'){ state.arrangeMode=!state.arrangeMode; state.movingPlantIndex=null; save(); render(); }
+        else if (action==='show-move-picker'){ 
+          state.movingPlantIndex = +node.getAttribute('data-plant-index'); 
+          save(); render(); 
+        }
+        else if (action==='move-to-sill'){ 
+          const targetSill = +node.getAttribute('data-target-sill');
+          if (state.movingPlantIndex !== null) {
+            movePlantBetweenSills(state.currentSillIndex, state.movingPlantIndex, targetSill);
+          }
+        }
+        else if (action==='cancel-move'){ 
+          state.movingPlantIndex = null; 
+          save(); render(); 
+        }
+        else if (action==='prev-sill'){ if (state.currentSillIndex > 0) { state.currentSillIndex--; save(); render(); } }
+        else if (action==='next-sill'){ if (state.currentSillIndex < state.windowsills.length - 1) { state.currentSillIndex++; save(); render(); } }
+        else if (action==='goto-sill'){ state.currentSillIndex = +node.getAttribute('data-sill-index'); save(); render(); }
         else if (action==='do-advance-days'){ const input = app.querySelector('[data-action="dev-advance-days"]'); const n = Math.max(1, parseInt(input.value||'1',10)); state.streak += n; state.day.playedToday=false; save(); render(); }
         else if (action==='reset-game'){ hardResetGame(); }
         else if (action==='soft-reset'){ softResetToday(); }
@@ -743,12 +918,13 @@
       const el = gallery.querySelector('.drag-plant[data-gindex="'+draggingIdx+'"]');
       if (!el) return;
       const w = el.getBoundingClientRect().width || 0;
-      const cx = clamp(clientX(evt) - rect.left, 0, rect.width);   // center X in gallery space
+      const cx = clamp(clientX(evt) - rect.left, 0, rect.width);
       let leftPx = cx - w/2;
       leftPx = Math.max(0, Math.min(rect.width - w, leftPx));
       el.style.left = leftPx + 'px';
       const xPct = (cx / rect.width) * 100;
-      if (state.gallery[draggingIdx]) state.gallery[draggingIdx].xPct = xPct;
+      const currentSill = state.windowsills[state.currentSillIndex];
+      if (currentSill && currentSill.plants[draggingIdx]) currentSill.plants[draggingIdx].xPct = xPct;
     }
     function onUp(){
       if (draggingIdx==null) return;
@@ -757,6 +933,36 @@
       draggingIdx = null;
       save();
     }
+    
+    // Swipe detection for mobile
+    let touchStartX = 0;
+    let touchEndX = 0;
+    
+    function handleSwipe(){
+      const swipeThreshold = 50;
+      if (touchEndX < touchStartX - swipeThreshold && state.currentSillIndex < state.windowsills.length - 1) {
+        state.currentSillIndex++;
+        save(); render();
+      }
+      if (touchEndX > touchStartX + swipeThreshold && state.currentSillIndex > 0) {
+        state.currentSillIndex--;
+        save(); render();
+      }
+    }
+    
+    win.addEventListener('touchstart', e => {
+      if (!state.arrangeMode) {
+        touchStartX = e.changedTouches[0].screenX;
+      }
+    });
+    
+    win.addEventListener('touchend', e => {
+      if (!state.arrangeMode) {
+        touchEndX = e.changedTouches[0].screenX;
+        handleSwipe();
+      }
+    });
+    
     win.addEventListener('mousedown', onDown);
     win.addEventListener('touchstart', onDown, {passive:false});
     window.addEventListener('mousemove', onMove);
@@ -764,13 +970,11 @@
     window.addEventListener('mouseup', onUp);
     window.addEventListener('touchend', onUp);
 
-    // After mount & resize, position from stored xPct
     positionPlantsFromPct();
     window.addEventListener('resize', positionPlantsFromPct);
   }
 
   function getCssNumber(varName){ const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); return parseFloat(v.replace('px','')); }
-  // Current time, respecting dev override if enabled
   function currentTime(){
     if (state.devMode && state.devTimeOverride){
       const now = new Date();
@@ -783,7 +987,6 @@
     return new Date();
   }
 
-  // Try to obtain geolocation and store in state
   function initLocationAstronomy(){
     if (!state.location?.geoEnabled) return;
     if (state.location.coords || state.location.denied) return;
@@ -801,7 +1004,6 @@
     }
   }
 
-  // Compute sun/moon positioning using SunCalc
   function computeSunMoon(now, lat, lon){
     const times = SunCalc.getTimes(now, lat, lon);
     const sunrise=times.sunrise.getTime(), sunset=times.sunset.getTime();
@@ -879,8 +1081,23 @@
           const a=hexToRgb(c1), b=hexToRgb(c2);
           return rgbToHex(Math.round(a.r+(b.r-a.r)*t), Math.round(a.g+(b.g-a.g)*t), Math.round(a.b+(b.b-a.b)*t));
         }
+        const currentSky = sky.style.background;
+        const isTinted = currentSky.includes('linear-gradient') && currentSky.split('linear-gradient').length > 2;
+        let baseGradient;
+        if (isTinted) {
+          const parts = currentSky.split('), linear-gradient(');
+          baseGradient = 'linear-gradient(' + parts[1];
+        } else {
+          baseGradient = currentSky;
+        }
         const top=mix(dayTop, nightTop, darkness), bot=mix(dayBot, nightBot, darkness);
-        sky.style.background = `linear-gradient(${top}, ${bot})`;
+        const currentSill = state.windowsills[state.currentSillIndex];
+        const theme = currentSill ? WINDOWSILL_THEMES[currentSill.theme] : WINDOWSILL_THEMES[0];
+        if (theme.bgTint) {
+          sky.style.background = `linear-gradient(${theme.bgTint}, ${theme.bgTint}), linear-gradient(${top}, ${bot})`;
+        } else {
+          sky.style.background = `linear-gradient(${top}, ${bot})`;
+        }
       }
       const cloudOpacity = 0.9*(1-darkness);
       if (clouds1) clouds1.style.opacity = cloudOpacity;
@@ -889,10 +1106,10 @@
       if (sun)  sun.style.opacity  = (dayT>0 && dayT<1) ? (0.9 * (1 - dusk)) : 0;
       if (moon) moon.style.opacity = (nightT>0 && nightT<1) ? (0.8 * (1 - dawn)) : 0;
 	  if (moon && document.getElementById('moon-shadow')) {
-  const now = currentTime();
-  const moonIllum = SunCalc.getMoonIllumination(now);
-  updateMoonPhase(moon, document.getElementById('moon-shadow'), moonIllum);
-}
+        const now = currentTime();
+        const moonIllum = SunCalc.getMoonIllumination(now);
+        updateMoonPhase(moon, document.getElementById('moon-shadow'), moonIllum);
+      }
     } else {
       const loc = state.location.coords || FALLBACK_LOC;
       const now = currentTime();
@@ -913,7 +1130,13 @@
           return rgbToHex(Math.round(a.r+(b.r-a.r)*t), Math.round(a.g+(b.g-a.g)*t), Math.round(a.b+(b.b-a.b)*t));
         }
         const top=mix(dayTop, nightTop, astro.darkness), bot=mix(dayBot, nightBot, astro.darkness);
-        sky.style.background = `linear-gradient(${top}, ${bot})`;
+        const currentSill = state.windowsills[state.currentSillIndex];
+        const theme = currentSill ? WINDOWSILL_THEMES[currentSill.theme] : WINDOWSILL_THEMES[0];
+        if (theme.bgTint) {
+          sky.style.background = `linear-gradient(${theme.bgTint}, ${theme.bgTint}), linear-gradient(${top}, ${bot})`;
+        } else {
+          sky.style.background = `linear-gradient(${top}, ${bot})`;
+        }
       }
       const cloudOpacity = 0.9*(1-astro.darkness);
       if (clouds1) clouds1.style.opacity = cloudOpacity;
@@ -928,14 +1151,14 @@
         moon.style.transform = `translate(-50%, -50%) scale(${scale})`;
       }
 	  if (moon && document.getElementById('moon-shadow')) {
-  updateMoonPhase(moon, document.getElementById('moon-shadow'), astro.moonIllum);
-}
+        updateMoonPhase(moon, document.getElementById('moon-shadow'), astro.moonIllum);
+      }
     }
   }
 
   function garden(){ return garden._html(); }
   garden._html = function(){
-    if (state.day.plants.length > 1) state.day.plants = state.day.plants.slice(0,1); // single-plant mode
+    if (state.day.plants.length > 1) state.day.plants = state.day.plants.slice(0,1);
     return `<div class="plants-grid">${state.day.plants.map(plantCard).join('')}</div>`;
   };
 
@@ -947,7 +1170,6 @@
     bind(); positionAstronomy();
   }
 
-  // Tick
   setInterval(()=>{
     positionAstronomy();
     const now = Date.now();
